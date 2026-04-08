@@ -33,8 +33,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 30      # used only when MODE == "demo"
+SAMPLE_SIZE         = 10      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases (Gemini free tier is very generous)
+RANDOM_SEED         = None      # change this or set to None for a different sample each time
 
 # ── Paths — all relative to MultiAgentic-COD (the repo root) ─────────────────
 # agents/run_pipeline.py lives inside agents/, so .parent.parent == repo root
@@ -285,7 +286,7 @@ def main() -> None:
     from agents.graph import run_single_case
 
     # ── Load dossiers ─────────────────────────────────────────────────────────
-    cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE)
+    cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED)
     total_cases = len(cases)
 
     # ── Prepare results directory; clear prior run files ─────────────────────
@@ -342,16 +343,16 @@ def main() -> None:
         # ── Print to terminal ─────────────────────────────────────────────────
         _print_case_result(final_state)
 
-        # ── Collect CSV row ───────────────────────────────────────────────────
-        csv_buffer.append(_build_csv_row(final_state))
+        # ── Collect and save row immediately ───────────────────────────────
+        row = _build_csv_row(final_state)
+        csv_buffer.append(row)
+        
+        _append_to_csv(csv_buffer, _PRED_CSV, write_header=first_write)
+        first_write = False
+        csv_buffer = []   # flush buffer after each save to ensure visibility
 
-        # ── Incremental save every 50 cases (important for full mode) ─────────
-        if MODE == "full" and idx % 50 == 0:
-            _append_to_csv(csv_buffer, _PRED_CSV, write_header=first_write)
-            first_write = False
-            csv_buffer = []   # flush buffer after save
-
-            # Progress and ETA
+        # Progress and ETA
+        if idx % 5 == 0 or idx == total_cases:
             elapsed     = time.time() - start_time
             avg_per     = elapsed / idx
             eta_s       = avg_per * (total_cases - idx)

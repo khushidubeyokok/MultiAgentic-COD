@@ -167,7 +167,25 @@ def run_single_case(case: dict) -> dict:
     }
 
     print(f"[INFO] Running pipeline for case_id={initial_state['case_id']} …")
-    final_state = graph.invoke(initial_state)
+    
+    final_state = initial_state
+    for event in graph.stream(initial_state):
+        for node_name, output in event.items():
+            # Update our cumulative state
+            final_state.update(output)
+            
+            # Print real-time updates
+            if "agent" in node_name:
+                field = node_name.replace("_node", "_output")
+                diag = output.get(field, {}).get("diagnosis", "Unknown")
+                conf = output.get(field, {}).get("confidence", "N/A")
+                persona = node_name.replace("_", " ").title()
+                print(f"  [STREAM] {persona} finished: {diag} [{conf}]")
+            elif "critic" in node_name:
+                print(f"  [STREAM] Critic adversarial analysis complete.")
+            elif "adjudicator" in node_name:
+                print(f"  [STREAM] Adjudicator final verdict rendered.")
+
     print(f"[INFO] Complete — case_id={initial_state['case_id']} | "
           f"verdict={final_state.get('mapped_category', 'N/A')}")
     return final_state

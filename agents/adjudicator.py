@@ -5,11 +5,11 @@ Defines the adjudicator_node LangGraph node function.
 """
 
 import json
-import re
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
+from agents.utils import parse_best_json, strip_thoughts
 
 _LLM = ChatOllama(
     model="openthinker:7b",
@@ -27,35 +27,12 @@ PHMRC_CATEGORIES = [
     "Road Traffic",
 ]
 
-def _strip_thoughts(text: str) -> str:
-    """Strip <thought> blocks."""
-    return re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
-
-def _parse_llm_json(raw: str) -> dict:
-    """Robustly parse JSON, stripping <thought> blocks."""
-    text = _strip_thoughts(raw)
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except:
-            pass
-    return {
-        "final_diagnosis": "Parse Error",
-        "mapped_category": "Other Defined Causes of Child Deaths",
-        "confidence_score": 0,
-        "final_reasoning": "Adjudicator output parse failed.",
-        "winning_agent": "None",
-        "error": True,
-        "raw_response": raw,
-    }
-
 def _build_user_prompt(state: VAState) -> str:
     a1, a2, a3 = state["agent1_output"], state["agent2_output"], state["agent3_output"]
     def _get(d: dict, k: str) -> str: return str(d.get(k, "Unknown"))
     
-    return f"""### PATIENT DOSSIER ###
-{state["full_dossier"][:3000]}
+    return f"""### PATIENT DOSSIER (Partial) ###
+{state["full_dossier"][:5000]}
 
 ### SPECIALIST INPUTS ###
 Agent 1: {_get(a1, "diagnosis")} | Reasoning: {_get(a1, "primary_reasoning")}
@@ -72,16 +49,33 @@ Categories: {", ".join(PHMRC_CATEGORIES)}
 Respond ONLY with the JSON block."""
 
 def adjudicator_node(state: VAState) -> dict:
+    a1, a2, a3 = state["agent1_output"], state["agent2_output"], state["agent3_output"]
+    
+    # ── CONSENSUS FORCE ───────────────────────────────────────────────────────
+    # If all three specialists agree on an EXACT PHMRC category, Bypassing LLM call.
+    d1, d2, d3 = a1.get("diagnosis"), a2.get("diagnosis"), a3.get("diagnosis")
+    if d1 == d2 == d3 and d1 in PHMRC_CATEGORIES:
+        print(f"[INFO] Adjudicator: Unanimous consensus detected ({d1}). Applying Consensus Force.")
+        return {
+            "final_diagnosis":  str(d1),
+            "mapped_category":  str(d1),
+            "confidence_score": 100,
+            "final_reasoning":  "Unanimous consensus among all three medical specialists.",
+            "winning_agent":    "Consensus",
+        }
+
+    # Otherwise, perform LLM adjudication
     prompt = _build_user_prompt(state)
     response = _LLM.invoke(prompt)
     raw_text = response.content if hasattr(response, "content") else str(response)
     
-    result = _parse_llm_json(raw_text)
+    result = parse_best_json(raw_text)
     
-    # Simple remap (can be improved if needed)
-    cat = result.get("mapped_category", "Other Defined Causes of Child Deaths")
+    # Map the diagnosis back to canonical PHMRC if possible
+    cat = result.get("mapped_category", result.get("final_diagnosis", "Other Defined Causes of Child Deaths"))
+    
+    # Simple remap
     if cat not in PHMRC_CATEGORIES:
-        # Try substring search
         for c in PHMRC_CATEGORIES:
             if c.lower() in str(cat).lower():
                 cat = c
@@ -92,6 +86,7 @@ def adjudicator_node(state: VAState) -> dict:
     return {
         "final_diagnosis":  str(result.get("final_diagnosis", cat)),
         "mapped_category":  str(cat),
-        "confidence_score": int(result.get("confidence_score", 0)),
+        "confidence_score": int(result.get("confidence_score", 50)),
         "final_reasoning":  str(result.get("final_reasoning", "No reasoning.")),
+        "winning_agent":    str(result.get("winning_agent", "Adjudicator Override")),
     }
