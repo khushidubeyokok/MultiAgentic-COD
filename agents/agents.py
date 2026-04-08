@@ -1,263 +1,74 @@
 """
 agents/agents.py
 ----------------
-Defines the three LangGraph agent node functions for the Verbal Autopsy pipeline.
-
-Each node:
-  1. Reads the full_dossier from the shared state
-  2. Calls the Google Gemini 1.5 Flash LLM with a specialist system prompt
-  3. Robustly parses the JSON response
-  4. Returns a partial state update containing only the field it fills
-
-The ChatGoogleGenerativeAI client is initialised ONCE at module level to be reused across calls.
+Defines the three specialist agent nodes (nodes in the LangGraph).
 """
 
 import json
-import os
 import re
-
-from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
 
-# ── Load environment variables from .env ─────────────────────────────────────
-load_dotenv()
-
-# ── LLM client — shared across all agent calls ───────────────────────────────
-_LLM = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.environ["GOOGLE_API_KEY"],
-    temperature=0.3,
-    max_output_tokens=800,
+_LLM = ChatOllama(
+    model="openthinker:7b",
+    temperature=0.0,
+    num_ctx=8192,
 )
 
-# ── 21 valid PHMRC causes of death ───────────────────────────────────────────
-PHMRC_CATEGORIES = [
-    "Drowning", "Poisonings", "Other Cardiovascular Diseases", "AIDS",
-    "Violent Death", "Malaria", "Other Cancers", "Measles", "Meningitis",
-    "Encephalitis", "Diarrhea/Dysentery", "Other Defined Causes of Child Deaths",
-    "Other Infectious Diseases", "Hemorrhagic fever", "Other Digestive Diseases",
-    "Bite of Venomous Animal", "Fires", "Falls", "Sepsis", "Pneumonia",
-    "Road Traffic",
-]
-
-# ── System prompts ────────────────────────────────────────────────────────────
-
-_AGENT1_SYSTEM = """\
-You are a Pediatric Infectious Disease Specialist conducting a verbal autopsy analysis. \
-You have deep expertise in tropical and endemic infectious diseases affecting children under 5 \
-in low-income settings. Your diagnostic lens prioritizes: fever patterns and their characteristics, \
-infectious etiology, endemic disease prevalence by geography, immunization status implications, \
-respiratory infections, enteric infections, vector-borne diseases, and CNS infections.
-
-You are participating in a blind diagnostic exercise. You will read a patient dossier compiled \
-from a structured survey and caregiver narrative about a deceased child. Your task is to determine \
-the most likely cause of death.
-
-The 21 possible PHMRC causes of death you may diagnose are:
-Here you go:  Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, \
-Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, \
-Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, \
-Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic
-
-Rules:
-- Your diagnosis field must be EXACTLY one of the 21 categories listed above. No variations, no combining, no new names.
-- supporting_evidence must be direct quotes or close paraphrases from the dossier text. Do not invent findings.
-- contradicting_evidence must be honest — list real findings in the dossier that weaken your diagnosis.
-- differential_considered must list at least 2 other diagnoses you considered and why you ruled them out.
-- confidence must be High only if the dossier strongly points to your diagnosis with minimal ambiguity. Use Medium if reasonable. Use Low if you are guessing.
-
-You MUST respond with ONLY this JSON structure, no other text:
-{
-  "agent_name": "Pediatric Infectious Disease Specialist",
-  "diagnosis": "<EXACTLY one of the 21 PHMRC categories>",
-  "confidence": "<High|Medium|Low>",
-  "primary_reasoning": "<2-3 sentences>",
-  "supporting_evidence": ["<finding from dossier>", "<finding from dossier>"],
-  "contradicting_evidence": ["<finding that weakens your diagnosis>"],
-  "differential_considered": ["<other diagnosis: reason ruled out>", "<other diagnosis: reason ruled out>"]
-}\
-"""
-
-_AGENT2_SYSTEM = """\
-You are a Pediatric Intensivist conducting a verbal autopsy analysis. You have deep expertise \
-in critical illness trajectories, physiological deterioration patterns, neonatal pathophysiology, \
-and cause-of-death determination from clinical timelines. Your diagnostic lens prioritizes: \
-illness onset and duration, respiratory failure patterns, neonatal period causes, birth complications, \
-metabolic and hemodynamic deterioration, care-seeking patterns as proxy for severity, \
-and physiological impossibilities in stated timelines.
-
-You are participating in a blind diagnostic exercise. You will read a patient dossier compiled \
-from a structured survey and caregiver narrative about a deceased child. Your task is to determine \
-the most likely cause of death.
-
-The 21 possible PHMRC causes of death you may diagnose are:
-Here you go:  Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, \
-Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, \
-Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, \
-Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic
-
-Rules:
-- Your diagnosis field must be EXACTLY one of the 21 categories listed above.
-- supporting_evidence must be direct quotes or close paraphrases from the dossier text only.
-- contradicting_evidence must be honest — list real findings that weaken your diagnosis.
-- differential_considered must list at least 2 other diagnoses and why you ruled them out.
-- Pay special attention to the illness timeline section and clinical presentation section.
-- If the child is a neonate (age in days), heavily weight neonatal causes.
-
-You MUST respond with ONLY this JSON structure, no other text:
-{
-  "agent_name": "Pediatric Intensivist",
-  "diagnosis": "<EXACTLY one of the 21 PHMRC categories>",
-  "confidence": "<High|Medium|Low>",
-  "primary_reasoning": "<2-3 sentences>",
-  "supporting_evidence": ["<finding from dossier>", "<finding from dossier>"],
-  "contradicting_evidence": ["<finding that weakens your diagnosis>"],
-  "differential_considered": ["<other diagnosis: reason ruled out>", "<other diagnosis: reason ruled out>"]
-}\
-"""
-
-_AGENT3_SYSTEM = """\
-You are a Pediatric Trauma and Nutritional Medicine Specialist conducting a verbal autopsy analysis. \
-You have deep expertise in injury mechanisms, nutritional deficiency disorders, congenital anomalies, \
-and non-infectious causes of child death. Your diagnostic lens prioritizes: injury type and mechanism, \
-signs of chronic malnutrition (hair changes, skin flaking, edema, weight loss, oral thrush), \
-congenital abnormalities, bleeding disorders, and causes often missed by infectious disease-focused clinicians. \
-You also serve as a devil's advocate — when infectious causes seem obvious, you specifically look \
-for non-infectious explanations.
-
-You are participating in a blind diagnostic exercise. You will read a patient dossier compiled \
-from a structured survey and caregiver narrative about a deceased child. Your task is to determine \
-the most likely cause of death.
-
-The 21 possible PHMRC causes of death you may diagnose are:
-Here you go:  Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, \
-Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, \
-Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, \
-Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic
-
-Rules:
-- Your diagnosis field must be EXACTLY one of the 21 categories listed above.
-- supporting_evidence must be direct quotes or close paraphrases from the dossier text only.
-- contradicting_evidence must be honest — list real findings that weaken your diagnosis.
-- differential_considered must list at least 2 other diagnoses and why you ruled them out.
-- If you genuinely believe an infectious cause is correct, you may diagnose it — but explain why non-infectious causes were ruled out.
-
-You MUST respond with ONLY this JSON structure, no other text:
-{
-  "agent_name": "Pediatric Trauma and Nutritional Medicine Specialist",
-  "diagnosis": "<EXACTLY one of the 21 PHMRC categories>",
-  "confidence": "<High|Medium|Low>",
-  "primary_reasoning": "<2-3 sentences>",
-  "supporting_evidence": ["<finding from dossier>", "<finding from dossier>"],
-  "contradicting_evidence": ["<finding that weakens your diagnosis>"],
-  "differential_considered": ["<other diagnosis: reason ruled out>", "<other diagnosis: reason ruled out>"]
-}\
-"""
-
-# ── JSON response parser ──────────────────────────────────────────────────────
+# Canonical list for validation
+PHMRC = "Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic"
 
 def _parse_llm_json(raw: str, agent_name: str) -> dict:
-    """
-    Robustly parse a JSON object from an LLM response.
-
-    Steps:
-      1. Strip leading/trailing whitespace.
-      2. Remove markdown code fences (```json ... ``` or ``` ... ```).
-      3. Attempt json.loads on the cleaned string.
-      4. If that fails, search for the first {...} block in the text.
-      5. On total failure, return a fallback error dict.
-    """
-    text = raw.strip()
-
-    # Step 2: Remove markdown fences
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s*```$", "", text)
-    text = text.strip()
-
-    # Step 3: Direct parse
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    # Step 4: Find the first JSON object block
+    """Robustly parse JSON, stripping <thought> blocks if present."""
+    # Strip <thought>...</thought>
+    text = re.sub(r"<thought>.*?</thought>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
+    
+    # Try to find JSON block
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:
             return json.loads(match.group())
-        except json.JSONDecodeError:
+        except:
             pass
+            
+    # Fallback to parsing the raw text directly if no braces found (unlikely for openthinker)
+    try:
+        return json.loads(text)
+    except:
+        pass
 
-    # Step 5: Fallback error dict
     print(f"[WARN] {agent_name}: JSON parse failed. Returning error dict.")
     return {
         "agent_name": agent_name,
         "diagnosis": "Unknown",
         "confidence": "Low",
-        "primary_reasoning": "JSON parsing failed.",
-        "supporting_evidence": [],
-        "contradicting_evidence": [],
-        "differential_considered": [],
+        "primary_reasoning": "Reasoning model output parse failed.",
         "error": True,
-        "raw_response": raw,
+        "raw_response": raw
     }
 
-
-# ── Shared LLM call helper ────────────────────────────────────────────────────
-
-def _call_llm(system_prompt: str, dossier: str, agent_name: str) -> dict:
-    """
-    Build messages, call the Groq LLM, and parse the JSON response.
-    Returns a parsed agent output dict.
-    """
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=(
-            "Below is the patient dossier. Read it carefully and respond ONLY with "
-            "a valid JSON object matching the required schema.\n\n"
-            f"{dossier}"
-        )),
-    ]
-
-    response = _LLM.invoke(messages)
+def _call_llm(dossier: str, persona: str) -> dict:
+    prompt = (
+        f"You are a {persona}. Analyze the patient dossier and provide a diagnosis.\n\n"
+        f"### PATIENT DOSSIER ###\n{dossier}\n\n"
+        "### TASK ###\n"
+        f"1. Reason through the clinical evidence.\n"
+        f"2. Map the diagnosis to EXACTLY one of: {PHMRC}.\n"
+        "3. Respond ONLY with a JSON object in this format:\n"
+        "{\"diagnosis\": \"exact category from list\", \"confidence\": \"High/Medium/Low\", \"primary_reasoning\": \"2-3 sentence summary\"}"
+    )
+    
+    response = _LLM.invoke(prompt)
     raw_text = response.content if hasattr(response, "content") else str(response)
-    result = _parse_llm_json(raw_text, agent_name)
-
-    # Ensure the agent_name field is always set correctly
-    result.setdefault("agent_name", agent_name)
-    return result
-
-
-# ── Agent node functions ──────────────────────────────────────────────────────
+    return _parse_llm_json(raw_text, persona)
 
 def agent1_node(state: VAState) -> dict:
-    """
-    Agent 1 — Pediatric Infectious Disease Specialist.
-    Reads full_dossier from state, calls the LLM, returns {agent1_output: ...}.
-    """
-    dossier = state["full_dossier"]
-    output = _call_llm(_AGENT1_SYSTEM, dossier, "Pediatric Infectious Disease Specialist")
-    return {"agent1_output": output}
-
+    return {"agent1_output": _call_llm(state["full_dossier"], "Pediatric Infectious Disease Specialist")}
 
 def agent2_node(state: VAState) -> dict:
-    """
-    Agent 2 — Pediatric Intensivist.
-    Reads full_dossier from state, calls the LLM, returns {agent2_output: ...}.
-    """
-    dossier = state["full_dossier"]
-    output = _call_llm(_AGENT2_SYSTEM, dossier, "Pediatric Intensivist")
-    return {"agent2_output": output}
-
+    return {"agent2_output": _call_llm(state["full_dossier"], "Pediatric Intensivist")}
 
 def agent3_node(state: VAState) -> dict:
-    """
-    Agent 3 — Pediatric Trauma & Nutritional Medicine Specialist.
-    Reads full_dossier from state, calls the LLM, returns {agent3_output: ...}.
-    """
-    dossier = state["full_dossier"]
-    output = _call_llm(_AGENT3_SYSTEM, dossier, "Pediatric Trauma and Nutritional Medicine Specialist")
-    return {"agent3_output": output}
+    return {"agent3_output": _call_llm(state["full_dossier"], "Pediatric Trauma and Nutritional Specialist")}

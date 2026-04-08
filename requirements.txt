@@ -1,4 +1,5 @@
 langgraph
-langchain-google-genai
+langchain-ollama
+langchain-core
 python-dotenv
 pandas

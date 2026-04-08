@@ -23,48 +23,66 @@ from agents.agents import agent1_node, agent2_node, agent3_node
 from agents.critic import critic_node
 from agents.adjudicator import adjudicator_node
 
-# ── Rate-limit retry wrapper ──────────────────────────────────────────────────
+# ── Retry wrapper for transient API errors ───────────────────────────────────
 
-def _with_rate_limit_retry(node_fn):
+def _with_retry(node_fn):
     """
-    Wraps an agent node function with a single rate-limit retry.
+    Wraps an agent node function with retry logic for transient API errors.
 
-    If the Groq API returns a 429 on the first call, we wait 60 seconds
-    and retry once. On a second failure we return an error-flagged dict
-    for the field the node writes. critic_node and adjudicator_node handle
-    their own retries internally.
+    Handles two error classes:
+      • 429 / rate limit  → wait 60 s, retry once
+      • 503 / unavailable → wait 15 s, retry once (server overload, not quota)
+
+    On total failure returns a graceful error-flagged dict for the agent's
+    state field so the pipeline continues to critic/adjudicator rather than
+    crashing the entire case.
     """
+    key_map = {
+        "agent1_node": "agent1_output",
+        "agent2_node": "agent2_output",
+        "agent3_node": "agent3_output",
+    }
+
+    def _error_dict(exc: Exception) -> dict:
+        return {
+            "agent_name": node_fn.__name__,
+            "diagnosis": "Unknown",
+            "confidence": "Low",
+            "primary_reasoning": "API call failed after retry.",
+            "supporting_evidence": [],
+            "contradicting_evidence": [],
+            "differential_considered": [],
+            "error": True,
+            "raw_response": str(exc),
+        }
+
     def wrapper(state: VAState) -> dict:
         try:
             return node_fn(state)
         except Exception as exc:
-            if "429" in str(exc) or "rate limit" in str(exc).lower():
-                print(f"[WARN] Rate limit hit for {node_fn.__name__}. "
-                      "Waiting 60 s before retry…")
-                time.sleep(60)
-                try:
-                    return node_fn(state)
-                except Exception as retry_exc:
-                    print(f"[ERROR] Retry failed for {node_fn.__name__}: {retry_exc}")
-                    error_dict = {
-                        "agent_name": node_fn.__name__,
-                        "diagnosis": "Unknown",
-                        "confidence": "Low",
-                        "primary_reasoning": "API call failed after retry.",
-                        "supporting_evidence": [],
-                        "contradicting_evidence": [],
-                        "differential_considered": [],
-                        "error": True,
-                        "raw_response": str(retry_exc),
-                    }
-                    key_map = {
-                        "agent1_node": "agent1_output",
-                        "agent2_node": "agent2_output",
-                        "agent3_node": "agent3_output",
-                    }
-                    field = key_map.get(node_fn.__name__, "agent1_output")
-                    return {field: error_dict}
-            raise
+            exc_str = str(exc).lower()
+            is_rate_limit  = "429" in exc_str or "rate limit" in exc_str or "quota" in exc_str
+            is_unavailable = "503" in exc_str or "unavailable" in exc_str or "overload" in exc_str
+
+            if is_rate_limit:
+                wait = 60
+                label = "Rate limit (429)"
+            elif is_unavailable:
+                wait = 15
+                label = "Server overload (503)"
+            else:
+                raise  # unexpected error — propagate normally
+
+            print(f"[WARN] {label} hit for {node_fn.__name__}. "
+                  f"Waiting {wait} s before retry…")
+            time.sleep(wait)
+
+            try:
+                return node_fn(state)
+            except Exception as retry_exc:
+                print(f"[ERROR] Retry failed for {node_fn.__name__}: {retry_exc}")
+                field = key_map.get(node_fn.__name__, "agent1_output")
+                return {field: _error_dict(retry_exc)}
 
     wrapper.__name__ = node_fn.__name__
     return wrapper
@@ -88,9 +106,9 @@ def build_graph():
     builder = StateGraph(VAState)
 
     # ── Register nodes ────────────────────────────────────────────────────────
-    builder.add_node("agent1_node", _with_rate_limit_retry(agent1_node))
-    builder.add_node("agent2_node", _with_rate_limit_retry(agent2_node))
-    builder.add_node("agent3_node", _with_rate_limit_retry(agent3_node))
+    builder.add_node("agent1_node", _with_retry(agent1_node))
+    builder.add_node("agent2_node", _with_retry(agent2_node))
+    builder.add_node("agent3_node", _with_retry(agent3_node))
     builder.add_node("critic_node", critic_node)
     builder.add_node("adjudicator_node", adjudicator_node)
 
