@@ -17,10 +17,9 @@ Returns: {
 import json
 import os
 import re
-import time
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
@@ -28,17 +27,17 @@ from agents.state import VAState
 # ── Load environment variables ────────────────────────────────────────────────
 load_dotenv()
 
-# ── Shared LLM client ─────────────────────────────────────────────────────────
-_LLM = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=os.environ["GROQ_API_KEY"],
+# ── Shared LLM client (Gemini 1.5 Flash) ──────────────────────────────────────
+_LLM = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    google_api_key=os.environ["GOOGLE_API_KEY"],
     temperature=0.3,
-    max_tokens=1500,
+    max_output_tokens=800,
 )
 
 # ── PHMRC category list (canonical, exact strings) ────────────────────────────
 PHMRC_CATEGORIES = [
-    "Drowning", "Poisonings", "Other Respiratory Diseases", "AIDS",
+    "Drowning", "Poisonings", "Other Cardiovascular Diseases", "AIDS",
     "Violent Death", "Malaria", "Other Cancers", "Measles", "Meningitis",
     "Encephalitis", "Diarrhea/Dysentery", "Other Defined Causes of Child Deaths",
     "Other Infectious Diseases", "Hemorrhagic fever", "Other Digestive Diseases",
@@ -55,10 +54,10 @@ _FUZZY_LOOKUP: dict = {
     "gastroenteritis":        "Diarrhea/Dysentery",
     # Respiratory variants
     "pneumonia":              "Pneumonia",
-    "respiratory":            "Other Respiratory Diseases",
-    "respiratory infection":  "Other Respiratory Diseases",
-    "ari":                    "Other Respiratory Diseases",
-    "acute respiratory":      "Other Respiratory Diseases",
+    "respiratory":            "Other Cardiovascular Diseases",
+    "respiratory infection":  "Other Cardiovascular Diseases",
+    "ari":                    "Other Cardiovascular Diseases",
+    "acute respiratory":      "Other Cardiovascular Diseases",
     # Infection / sepsis
     "sepsis":                 "Sepsis",
     "septicemia":             "Sepsis",
@@ -181,7 +180,7 @@ You must output a JSON object with exactly these fields:
 }
 
 The 21 PHMRC categories you MUST choose from (use EXACTLY these strings, no variations):
- Drowning, Poisonings, Other Respiratory Diseases, AIDS, Violent Death, Malaria, Other Cancers, \
+ Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, Other Cancers, \
 Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, Other Defined Causes of Child Deaths, \
 Other Infectious Diseases, Hemorrhagic fever, Other Digestive Diseases, Bite of Venomous Animal, \
 Fires, Falls, Sepsis, Pneumonia, Road Traffic
@@ -263,7 +262,8 @@ Differentials: {_list_str(a3.get("differential_considered", []))}
 CRITIC'S CROSS-EXAMINATION:
 {state.get("critique", "No critique available.")}
 
-Now render your final adjudication as a JSON object with the exact fields specified."""
+Now render your final adjudication as a JSON object with the exact fields specified.
+NOTE: If any agent diagnosis shows 'Parse Error', that agent failed to respond — treat it as an abstention and do not cite it as supporting evidence for any position."""
 
 
 def adjudicator_node(state: VAState) -> dict:
@@ -283,28 +283,8 @@ def adjudicator_node(state: VAState) -> dict:
         HumanMessage(content=_build_user_prompt(state)),
     ]
 
-    def _call() -> str:
-        response = _LLM.invoke(messages)
-        return response.content if hasattr(response, "content") else str(response)
-
-    try:
-        raw_text = _call()
-    except Exception as exc:
-        if "429" in str(exc) or "rate limit" in str(exc).lower():
-            print("[WARN] adjudicator_node: Rate limit hit. Waiting 60 s before retry…")
-            time.sleep(60)
-            try:
-                raw_text = _call()
-            except Exception as retry_exc:
-                print(f"[ERROR] adjudicator_node: Retry failed — {retry_exc}")
-                return {
-                    "final_diagnosis": "API Error",
-                    "mapped_category": "Other Defined Causes of Child Deaths",
-                    "confidence_score": 0,
-                    "final_reasoning": f"Adjudicator failed after retry: {retry_exc}",
-                }
-        else:
-            raise
+    response = _LLM.invoke(messages)
+    raw_text = response.content if hasattr(response, "content") else str(response)
 
     result = _parse_llm_json(raw_text)
 

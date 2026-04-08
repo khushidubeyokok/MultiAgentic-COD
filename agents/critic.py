@@ -11,10 +11,9 @@ Returns: {"critique": <plain text string>}
 """
 
 import os
-import time
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
@@ -22,12 +21,12 @@ from agents.state import VAState
 # ── Load environment variables ────────────────────────────────────────────────
 load_dotenv()
 
-# ── Shared LLM client (same model/settings as agents.py) ─────────────────────
-_LLM = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=os.environ["GROQ_API_KEY"],
+# ── Shared LLM client (Gemini 1.5 Flash) ──────────────────────────────────
+_LLM = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    google_api_key=os.environ["GOOGLE_API_KEY"],
     temperature=0.3,
-    max_tokens=1500,
+    max_output_tokens=800,
 )
 
 # ── Critic system prompt ──────────────────────────────────────────────────────
@@ -103,7 +102,8 @@ Supporting Evidence: {_safe_list_str(a3.get("supporting_evidence", []))}
 Contradicting Evidence: {_safe_list_str(a3.get("contradicting_evidence", []))}
 Differentials Considered: {_safe_list_str(a3.get("differential_considered", []))}
 
-Your task: Cross-examine all three diagnoses rigorously as described in your instructions."""
+Your task: Cross-examine all three diagnoses rigorously as described in your instructions.
+NOTE: Any agent showing diagnosis 'Parse Error' failed to return a valid response — treat it as an abstention, not as evidence for or against any diagnosis. Do not waste critique space on abstaining agents."""
 
 
 def critic_node(state: VAState) -> dict:
@@ -114,29 +114,13 @@ def critic_node(state: VAState) -> dict:
     Returns: {"critique": <plain text critique string>}
 
     The output is intentionally plain text, not JSON.
-    Rate-limit handling: on a 429, wait 60 s and retry once.
     """
     messages = [
         SystemMessage(content=_CRITIC_SYSTEM),
         HumanMessage(content=_build_user_prompt(state)),
     ]
 
-    def _call() -> str:
-        response = _LLM.invoke(messages)
-        return response.content if hasattr(response, "content") else str(response)
-
-    try:
-        critique_text = _call()
-    except Exception as exc:
-        if "429" in str(exc) or "rate limit" in str(exc).lower():
-            print("[WARN] critic_node: Rate limit hit. Waiting 60 s before retry…")
-            time.sleep(60)
-            try:
-                critique_text = _call()
-            except Exception as retry_exc:
-                print(f"[ERROR] critic_node: Retry failed — {retry_exc}")
-                critique_text = f"Critique unavailable due to API error: {retry_exc}"
-        else:
-            raise
+    response = _LLM.invoke(messages)
+    critique_text = response.content if hasattr(response, "content") else str(response)
 
     return {"critique": critique_text}

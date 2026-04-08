@@ -5,20 +5,19 @@ Defines the three LangGraph agent node functions for the Verbal Autopsy pipeline
 
 Each node:
   1. Reads the full_dossier from the shared state
-  2. Calls the Groq LLM (llama-3.3-70b-versatile) with a specialist system prompt
+  2. Calls the Google Gemini 1.5 Flash LLM with a specialist system prompt
   3. Robustly parses the JSON response
   4. Returns a partial state update containing only the field it fills
 
-The ChatGroq client is initialised ONCE at module level to be reused across calls.
+The ChatGoogleGenerativeAI client is initialised ONCE at module level to be reused across calls.
 """
 
 import json
 import os
 import re
-import time
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
@@ -27,16 +26,16 @@ from agents.state import VAState
 load_dotenv()
 
 # ── LLM client — shared across all agent calls ───────────────────────────────
-_LLM = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=os.environ["GROQ_API_KEY"],
+_LLM = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    google_api_key=os.environ["GOOGLE_API_KEY"],
     temperature=0.3,
-    max_tokens=1500,
+    max_output_tokens=800,
 )
 
 # ── 21 valid PHMRC causes of death ───────────────────────────────────────────
 PHMRC_CATEGORIES = [
-    "Drowning", "Poisonings", "Other Respiratory Diseases", "AIDS",
+    "Drowning", "Poisonings", "Other Cardiovascular Diseases", "AIDS",
     "Violent Death", "Malaria", "Other Cancers", "Measles", "Meningitis",
     "Encephalitis", "Diarrhea/Dysentery", "Other Defined Causes of Child Deaths",
     "Other Infectious Diseases", "Hemorrhagic fever", "Other Digestive Diseases",
@@ -58,7 +57,7 @@ from a structured survey and caregiver narrative about a deceased child. Your ta
 the most likely cause of death.
 
 The 21 possible PHMRC causes of death you may diagnose are:
-Here you go:  Drowning, Poisonings, Other Respiratory Diseases, AIDS, Violent Death, Malaria, \
+Here you go:  Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, \
 Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, \
 Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, \
 Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic
@@ -69,7 +68,17 @@ Rules:
 - contradicting_evidence must be honest — list real findings in the dossier that weaken your diagnosis.
 - differential_considered must list at least 2 other diagnoses you considered and why you ruled them out.
 - confidence must be High only if the dossier strongly points to your diagnosis with minimal ambiguity. Use Medium if reasonable. Use Low if you are guessing.
-- Respond ONLY with a valid JSON object. No text before or after.\
+
+You MUST respond with ONLY this JSON structure, no other text:
+{
+  "agent_name": "Pediatric Infectious Disease Specialist",
+  "diagnosis": "<EXACTLY one of the 21 PHMRC categories>",
+  "confidence": "<High|Medium|Low>",
+  "primary_reasoning": "<2-3 sentences>",
+  "supporting_evidence": ["<finding from dossier>", "<finding from dossier>"],
+  "contradicting_evidence": ["<finding that weakens your diagnosis>"],
+  "differential_considered": ["<other diagnosis: reason ruled out>", "<other diagnosis: reason ruled out>"]
+}\
 """
 
 _AGENT2_SYSTEM = """\
@@ -85,7 +94,7 @@ from a structured survey and caregiver narrative about a deceased child. Your ta
 the most likely cause of death.
 
 The 21 possible PHMRC causes of death you may diagnose are:
-Here you go:  Drowning, Poisonings, Other Respiratory Diseases, AIDS, Violent Death, Malaria, \
+Here you go:  Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, \
 Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, \
 Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, \
 Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic
@@ -97,7 +106,17 @@ Rules:
 - differential_considered must list at least 2 other diagnoses and why you ruled them out.
 - Pay special attention to the illness timeline section and clinical presentation section.
 - If the child is a neonate (age in days), heavily weight neonatal causes.
-- Respond ONLY with a valid JSON object. No text before or after.\
+
+You MUST respond with ONLY this JSON structure, no other text:
+{
+  "agent_name": "Pediatric Intensivist",
+  "diagnosis": "<EXACTLY one of the 21 PHMRC categories>",
+  "confidence": "<High|Medium|Low>",
+  "primary_reasoning": "<2-3 sentences>",
+  "supporting_evidence": ["<finding from dossier>", "<finding from dossier>"],
+  "contradicting_evidence": ["<finding that weakens your diagnosis>"],
+  "differential_considered": ["<other diagnosis: reason ruled out>", "<other diagnosis: reason ruled out>"]
+}\
 """
 
 _AGENT3_SYSTEM = """\
@@ -114,7 +133,7 @@ from a structured survey and caregiver narrative about a deceased child. Your ta
 the most likely cause of death.
 
 The 21 possible PHMRC causes of death you may diagnose are:
-Here you go:  Drowning, Poisonings, Other Respiratory Diseases, AIDS, Violent Death, Malaria, \
+Here you go:  Drowning, Poisonings, Other Cardiovascular Diseases, AIDS, Violent Death, Malaria, \
 Other Cancers, Measles, Meningitis, Encephalitis, Diarrhea/Dysentery, \
 Other Defined Causes of Child Deaths, Other Infectious Diseases, Hemorrhagic fever, \
 Other Digestive Diseases, Bite of Venomous Animal, Fires, Falls, Sepsis, Pneumonia, Road Traffic
@@ -125,7 +144,17 @@ Rules:
 - contradicting_evidence must be honest — list real findings that weaken your diagnosis.
 - differential_considered must list at least 2 other diagnoses and why you ruled them out.
 - If you genuinely believe an infectious cause is correct, you may diagnose it — but explain why non-infectious causes were ruled out.
-- Respond ONLY with a valid JSON object. No text before or after.\
+
+You MUST respond with ONLY this JSON structure, no other text:
+{
+  "agent_name": "Pediatric Trauma and Nutritional Medicine Specialist",
+  "diagnosis": "<EXACTLY one of the 21 PHMRC categories>",
+  "confidence": "<High|Medium|Low>",
+  "primary_reasoning": "<2-3 sentences>",
+  "supporting_evidence": ["<finding from dossier>", "<finding from dossier>"],
+  "contradicting_evidence": ["<finding that weakens your diagnosis>"],
+  "differential_considered": ["<other diagnosis: reason ruled out>", "<other diagnosis: reason ruled out>"]
+}\
 """
 
 # ── JSON response parser ──────────────────────────────────────────────────────

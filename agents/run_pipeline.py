@@ -34,7 +34,7 @@ if str(_REPO_ROOT) not in sys.path:
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
 SAMPLE_SIZE         = 30      # used only when MODE == "demo"
-DELAY_BETWEEN_CASES = 2       # seconds between cases to respect Groq rate limits
+DELAY_BETWEEN_CASES = 1       # seconds between cases (Gemini free tier is very generous)
 
 # ── Paths — all relative to MultiAgentic-COD (the repo root) ─────────────────
 # agents/run_pipeline.py lives inside agents/, so .parent.parent == repo root
@@ -58,7 +58,7 @@ _CSV_COLUMNS = [
 
 # ── 21 PHMRC categories (for post-run validation logging) ────────────────────
 PHMRC_CATEGORIES = [
-    "Drowning", "Poisonings", "Other Respiratory Diseases", "AIDS",
+    "Drowning", "Poisonings", "Other Cardiovascular Diseases", "AIDS",
     "Violent Death", "Malaria", "Other Cancers", "Measles", "Meningitis",
     "Encephalitis", "Diarrhea/Dysentery", "Other Defined Causes of Child Deaths",
     "Other Infectious Diseases", "Hemorrhagic fever", "Other Digestive Diseases",
