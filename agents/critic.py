@@ -38,29 +38,38 @@ You have received three specialist diagnoses from agents with DIFFERENT reasonin
 - Agent 2 (Eliminator) reasoned top-down by ruling out categories not supported by the dossier.
 - Agent 3 (Timeline Analyst) reasoned temporally through the clinical narrative arc.
 
-Step 1 — Check for consensus:
-If all three agents agree on the SAME PHMRC category, output ONLY this JSON:
+### CONSENSUS RULES (READ CAREFULLY) ###
+⚠️  "consensus" verdict REQUIRES ALL THREE AGENTS TO AGREE on the exact same PHMRC category.
+    2 out of 3 agreeing is NOT consensus — it is a SPLIT with a majority candidate.
+    Under no circumstances should you report "consensus" if any agent gave a different diagnosis.
+
+Step 1 — Check for TRUE consensus (all 3 agree):
+If and ONLY IF all three agents agree on the SAME PHMRC category, output this JSON:
 {
   "verdict": "consensus",
   "strongest_agent": "all",
   "consensus_diagnosis": "<category name>",
   "flag_for_review": false,
-  "reason": "unanimous agreement"
+  "reason": "unanimous agreement — all three agents independently reached the same category"
 }
 
-Step 2 — If they disagree, evaluate whose reasoning is MOST INTERNALLY CONSISTENT with the evidence cited from the dossier.
+Step 2 — If ANY agent disagrees (including 2-vs-1 splits), evaluate whose reasoning is MOST
+INTERNALLY CONSISTENT with the evidence cited from the dossier. This includes cases where
+2 agents agree and 1 disagrees.
 Do NOT use your own opinion of the correct diagnosis.
-Evaluate: (a) Does the agent's cited evidence actually appear in the dossier? (b) Does the reasoning chain from evidence to syndrome to category hold together logically?
-Output ONLY this JSON:
+Evaluate: (a) Does the agent's cited evidence actually appear in the dossier? (b) Does the
+reasoning chain from evidence to syndrome to category hold together logically?
+Output this JSON:
 {
   "verdict": "split",
   "strongest_agent": "agent1_evidence_collector / agent2_eliminator / agent3_timeline_analyst",
-  "recommended_diagnosis": "<category name>",
+  "recommended_diagnosis": "<category name of the most evidence-supported agent>",
   "flag_for_review": true or false,
   "reason": "<one sentence: which specific evidence best supports this agent's reasoning chain>"
 }
 
-Set flag_for_review to true ONLY if two or more agents give VERY DIFFERENT categories with equally strong reasoning.
+Set flag_for_review to true if two or more agents give VERY DIFFERENT categories with
+similarly strong reasoning (genuine clinical ambiguity).
 
 OUTPUT ONLY THE JSON OBJECT. No preamble, no explanation, no markdown fences."""
 

@@ -14,6 +14,8 @@ import math
 import random
 from pathlib import Path
 
+from agents.utils import PHMRC_CATEGORIES
+
 
 # ── Field defaults applied when a dossier entry is missing keys ──────────────
 _FIELD_DEFAULTS = {
@@ -124,6 +126,22 @@ def load_dossiers(
         result = _stratified_sample(cases, sample_size, rng)
     else:
         raise ValueError(f"Unknown mode '{mode}'. Choose 'demo' or 'full'.")
+
+    # ── Filter to valid PHMRC categories ─────────────────────────────────────
+    valid_set = set(PHMRC_CATEGORIES)
+    filtered = []
+    skipped = []
+    for c in result:
+        gt = c.get("ground_truth", "").strip()
+        if gt in valid_set:
+            filtered.append(c)
+        else:
+            skipped.append((c.get("case_id", "?"), gt))
+    if skipped:
+        print(f"[WARN] Skipping {len(skipped)} case(s) with ground_truth outside 21 valid PHMRC categories:")
+        for cid, gt in skipped:
+            print(f"  case_id={cid} | ground_truth='{gt}'")
+    result = filtered
 
     # ── Print summary ────────────────────────────────────────────────────────
     unique_cats = sorted({c["ground_truth"] or "UNKNOWN" for c in result})
