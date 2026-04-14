@@ -18,8 +18,8 @@ if str(_REPO_ROOT) not in sys.path:
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
 SAMPLE_SIZE         = 10      # used only when MODE == "demo"
-DELAY_BETWEEN_CASES = 1       # seconds between cases
-RANDOM_SEED         = None    # set to None for a different sample each time
+DELAY_BETWEEN_CASES = 1       # seconds between cases (local, no rate limits)
+RANDOM_SEED         = 42      # fixed seed for reproducible results
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _ROOT     = Path(__file__).resolve().parent.parent
@@ -161,7 +161,15 @@ def _compute_and_print_metrics(rows: list, output_path: Path) -> None:
 def main() -> None:
     from agents.data_loader import load_dossiers
     from agents.graph import run_single_case
+    from agents.few_shot_examples import init_example_bank, get_excluded_case_ids
+
+    # Build the few-shot example bank from the dataset
+    init_example_bank(str(_DATA))
+    excluded_ids = get_excluded_case_ids()
+
     cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED)
+    # Remove example bank cases from evaluation (prevent data leakage)
+    cases = [c for c in cases if str(c.get("case_id", "")) not in excluded_ids]
     total_cases = len(cases)
     _RESULTS.mkdir(parents=True, exist_ok=True)
     for f in (_PRED_CSV, _FAILED):

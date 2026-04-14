@@ -2,7 +2,7 @@
   EVALUATION METRICS
 ============================================================
 
-a. Overall Top-1 Accuracy: 4/10 = 40.0%
+a. Overall Top-1 Accuracy: 4/7 = 57.1%
 
 b. Per-Agent Accuracy:
-   Agent 1: 0.0% | Agent 2: 20.0% | Agent 3: 30.0%
+   Agent 1: 57.1% | Agent 2: 57.1% | Agent 3: 57.1%

@@ -1,4 +1,3 @@
-case_id=621 | reason=[Errno 13] Permission denied: 'C:\\Users\\khush\\OneDrive\\Desktop\\mini-project\\MultiAgentic-COD\\results\\predictions.csv'
-case_id=1921 | reason=[Errno 13] Permission denied: 'C:\\Users\\khush\\OneDrive\\Desktop\\mini-project\\MultiAgentic-COD\\results\\predictions.csv'
-case_id=778 | reason=[Errno 13] Permission denied: 'C:\\Users\\khush\\OneDrive\\Desktop\\mini-project\\MultiAgentic-COD\\results\\predictions.csv'
-case_id=1982 | reason=[Errno 13] Permission denied: 'C:\\Users\\khush\\OneDrive\\Desktop\\mini-project\\MultiAgentic-COD\\results\\predictions.csv'
+case_id=594 | reason=Connection error.
+case_id=170 | reason=Connection error.
+case_id=912 | reason=Connection error.

@@ -22,6 +22,7 @@ from agents.state import VAState
 from agents.agents import agent1_node, agent2_node, agent3_node
 from agents.critic import critic_node
 from agents.adjudicator import adjudicator_node
+from agents.preprocessor import condense_dossier
 
 # ── Retry wrapper for transient API errors ───────────────────────────────────
 
@@ -151,11 +152,15 @@ def run_single_case(case: dict) -> dict:
     -----
     - ground_truth is stored in state but NEVER passed to any agent prompt.
     """
+    # Pre-process the dossier (programmatic, no LLM)
+    condensed = condense_dossier(case)
+
     initial_state: VAState = {
         "case_id":       str(case.get("case_id", "")),
         "ground_truth":  str(case.get("ground_truth", "")),
         "has_narrative": bool(case.get("has_narrative", False)),
         "full_dossier":  str(case.get("full_dossier", "")),
+        "condensed_dossier": condensed,
         "agent1_output": {},
         "agent2_output": {},
         "agent3_output": {},

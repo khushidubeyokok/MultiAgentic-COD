@@ -27,6 +27,7 @@ class VAState(TypedDict):
     ground_truth: str     # true cause of death — NEVER shown to agents
     has_narrative: bool   # whether a caregiver narrative is present
     full_dossier: str     # complete dossier text passed to every agent
+    condensed_dossier: str  # preprocessed condensed dossier (positive findings only)
 
     # ── Agent outputs (each is a dict matching the agent output schema) ─────
     # Schema:

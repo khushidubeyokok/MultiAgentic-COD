@@ -1,5 +1,8 @@
 langgraph
 langchain-ollama
+langchain-groq
+langchain-nvidia-ai-endpoints
+langchain-google-genai
 langchain-core
 python-dotenv
 pandas
