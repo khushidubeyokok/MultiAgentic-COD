@@ -19,13 +19,7 @@ _DOMAIN_LABELS = {
     "injury": "Injury/Accident",
 }
 
-# Known secondary symptom patterns — respiratory symptoms that can be caused by other conditions
-_SECONDARY_NOTES = {
-    ("gastrointestinal", "respiratory"): "NOTE: Fast/difficult breathing can be caused by dehydration from diarrhea — consider GI cause as primary.",
-    ("bleeding", "respiratory"): "NOTE: Respiratory distress may be secondary to blood loss.",
-    ("injury_accident", "respiratory"): "NOTE: Respiratory symptoms may result from trauma/injury.",
-    ("injury", "respiratory"): "NOTE: Respiratory symptoms may result from trauma/injury.",
-}
+_SECONDARY_NOTES = {}  # Removed — let the model reason about symptom relationships
 
 
 def condense_dossier(case: dict) -> str:
@@ -39,18 +33,14 @@ def condense_dossier(case: dict) -> str:
 
     parts = []
 
-    # Demographics + geographic alert
+    # Demographics + geographic alerts
     demo = sections.get("demographics", "")
     if demo:
         parts.append(f"DEMOGRAPHICS: {demo}")
-        # Check for malaria-endemic regions
         demo_lower = str(demo).lower()
-        malaria_regions = ["tanzania", "nigeria", "kenya", "uganda", "mozambique",
-                          "india", "philippines", "bangladesh", "myanmar",
-                          "andhra pradesh", "uttar pradesh", "bohol", "pemba",
-                          "dar es salaam"]
-        if any(region in demo_lower for region in malaria_regions):
-            parts.append("⚠️ GEOGRAPHIC NOTE: Patient is from a malaria-endemic region. If prolonged/cyclical fever is present, strongly consider Malaria.")
+        geo_notes = _get_geographic_alerts(demo_lower)
+        if geo_notes:
+            parts.append(geo_notes)
 
     # Illness timeline
     timeline = sections.get("illness_timeline", "")
@@ -100,11 +90,6 @@ def condense_dossier(case: dict) -> str:
                             lines.append(f"  {note}")
                             added_notes.add(note)
 
-            # Add bleeding + fever alert for Hemorrhagic fever detection
-            domain_keys = [df[0] for df in domain_findings]
-            if "bleeding" in domain_keys and "fever" in domain_keys:
-                lines.append("  ⚠️ ALERT: Bleeding + fever present → strongly consider Hemorrhagic fever.")
-
             parts.append("CLINICAL FINDINGS (ranked by evidence):\n" + "\n".join(lines))
 
     elif isinstance(cp, str) and cp.strip():
@@ -124,6 +109,36 @@ def condense_dossier(case: dict) -> str:
         parts.append(f"NARRATIVE: {narr_str}")
 
     return "\n".join(parts) if parts else case.get("full_dossier", "")[:2000]
+
+
+def _get_geographic_alerts(demo_lower: str) -> str:
+    """Generate disease alerts based on patient's geographic location."""
+    alerts = []
+
+    # Sub-Saharan Africa
+    africa = ["tanzania", "nigeria", "kenya", "uganda", "mozambique",
+              "dar es salaam", "pemba"]
+    if any(r in demo_lower for r in africa):
+        alerts.append("Malaria (highly endemic), AIDS (high prevalence), Measles (low vaccination areas)")
+
+    # South Asia
+    south_asia = ["india", "andhra pradesh", "uttar pradesh", "bangladesh", "myanmar"]
+    if any(r in demo_lower for r in south_asia):
+        alerts.append("Malaria (endemic), Dengue/Hemorrhagic fever (endemic), Measles (low vaccination areas)")
+
+    # Southeast Asia
+    southeast_asia = ["philippines", "bohol", "indonesia", "vietnam", "cambodia"]
+    if any(r in demo_lower for r in southeast_asia):
+        alerts.append("Dengue/Hemorrhagic fever (highly endemic), Malaria (endemic)")
+
+    # Latin America
+    latam = ["mexico", "brazil", "colombia", "peru"]
+    if any(r in demo_lower for r in latam):
+        alerts.append("Dengue/Hemorrhagic fever (endemic)")
+
+    if alerts:
+        return "⚠️ GEOGRAPHIC CONTEXT: Region is endemic for: " + "; ".join(alerts) + ". Consider these when fever is present."
+    return ""
 
 
 def _is_negative_sentence(s: str) -> bool:
