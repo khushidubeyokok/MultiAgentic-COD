@@ -39,10 +39,18 @@ def condense_dossier(case: dict) -> str:
 
     parts = []
 
-    # Demographics
+    # Demographics + geographic alert
     demo = sections.get("demographics", "")
     if demo:
         parts.append(f"DEMOGRAPHICS: {demo}")
+        # Check for malaria-endemic regions
+        demo_lower = str(demo).lower()
+        malaria_regions = ["tanzania", "nigeria", "kenya", "uganda", "mozambique",
+                          "india", "philippines", "bangladesh", "myanmar",
+                          "andhra pradesh", "uttar pradesh", "bohol", "pemba",
+                          "dar es salaam"]
+        if any(region in demo_lower for region in malaria_regions):
+            parts.append("⚠️ GEOGRAPHIC NOTE: Patient is from a malaria-endemic region. If prolonged/cyclical fever is present, strongly consider Malaria.")
 
     # Illness timeline
     timeline = sections.get("illness_timeline", "")
@@ -91,6 +99,11 @@ def condense_dossier(case: dict) -> str:
                         if note not in added_notes:
                             lines.append(f"  {note}")
                             added_notes.add(note)
+
+            # Add bleeding + fever alert for Hemorrhagic fever detection
+            domain_keys = [df[0] for df in domain_findings]
+            if "bleeding" in domain_keys and "fever" in domain_keys:
+                lines.append("  ⚠️ ALERT: Bleeding + fever present → strongly consider Hemorrhagic fever.")
 
             parts.append("CLINICAL FINDINGS (ranked by evidence):\n" + "\n".join(lines))
 

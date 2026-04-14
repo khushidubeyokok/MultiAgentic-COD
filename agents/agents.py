@@ -23,6 +23,27 @@ _LLM = get_llm(temperature=0.0)
 PHMRC_LIST = ", ".join(PHMRC_CATEGORIES)
 _CATEGORY_HEADER = f"\n\n### CATEGORY REFERENCE ###\n{PHMRC_CATEGORY_GUIDE}\n"
 
+# ── Clinical rules applied to ALL agents (fixes known failure patterns) ──────
+_CLINICAL_RULES = """
+### MANDATORY CLINICAL RULES ###
+⚠️ You MUST follow these rules before outputting your diagnosis:
+
+RULE 1 — "Other Infectious Diseases" IS A LAST RESORT:
+Do NOT use "Other Infectious Diseases" unless you have explicitly ruled out ALL of these first: Pneumonia, Sepsis, Meningitis, Malaria, Measles, Diarrhea/Dysentery, Hemorrhagic fever, AIDS. If the case has fever + any specific organ involvement, it is almost certainly one of those — not OID.
+
+RULE 2 — GEOGRAPHIC CONTEXT MATTERS:
+Check the patient's LOCATION. If the child is from sub-Saharan Africa (Tanzania, Nigeria, etc.) or South/Southeast Asia (India, Philippines, etc.) AND has prolonged/cyclical fever → strongly consider Malaria before any other febrile illness.
+
+RULE 3 — BLEEDING = HEMORRHAGIC FEVER:
+If the dossier mentions bleeding from mouth, nose, gums, or skin AND fever → diagnose Hemorrhagic fever, NOT "Other Infectious Diseases" or Sepsis.
+
+RULE 4 — DIARRHEA PRIMACY:
+If diarrhea/loose stools are present alongside respiratory symptoms (fast breathing, difficult breathing), consider that the breathing problems may be CAUSED BY dehydration from diarrhea. In such cases, the primary diagnosis should be Diarrhea/Dysentery, not Pneumonia — UNLESS there is also cough with chest indrawing (which suggests true respiratory infection).
+
+RULE 5 — PNEUMONIA REQUIRES RESPIRATORY EVIDENCE:
+Do NOT diagnose Pneumonia unless there is clear cough AND (difficult breathing OR fast breathing OR chest indrawing). Fever alone is not enough. Breathing problems alone without cough may indicate dehydration, cardiac failure, or metabolic acidosis.
+"""
+
 # ──────────────────────────────────────────────────────────────────────────────
 # AGENT 1 — THE EVIDENCE COLLECTOR
 # ──────────────────────────────────────────────────────────────────────────────
@@ -155,6 +176,7 @@ def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: st
     full_prompt = (
         f"{protocol_prompt}"
         f"{_CATEGORY_HEADER}"
+        f"{_CLINICAL_RULES}"
         f"{examples_section}"
         f"\n### PATIENT DOSSIER ###\n{dossier}"
     )
