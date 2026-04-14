@@ -17,6 +17,28 @@ PHMRC_CATEGORIES = sorted([
     "Road Traffic",
 ], key=len, reverse=True)
 
+PHMRC_CATEGORY_GUIDE = """- Pneumonia: cough, fast or difficult breathing, chest indrawing, respiratory distress, fever, crackling breath sounds
+- Sepsis: sudden rapid deterioration, high fever or abnormally low temperature, signs of multiple organ involvement, no clear focal infection site
+- Meningitis: neck stiffness, bulging fontanelle, photophobia, seizures, high fever, altered consciousness, kernig/brudzinski signs
+- Encephalitis: brain inflammation, seizures, altered or fluctuating consciousness, fever, NO neck stiffness (distinguishes from meningitis)
+- Malaria: cyclical or spiking high fever, residence or travel in endemic area, anaemia, splenomegaly, rapid deterioration
+- Diarrhea/Dysentery: watery or bloody stools, severe dehydration, sunken eyes, skin tenting, rapid weight loss, cramping
+- Measles: maculopapular rash starting on face spreading downward, high fever, cough, conjunctivitis, Koplik spots inside mouth
+- Hemorrhagic fever: bleeding from multiple sites (nose, gums, skin), high fever, rash, very rapid deterioration, no obvious trauma
+- AIDS: chronic wasting, recurrent or unusual infections, oral thrush, persistent lymphadenopathy, failure to thrive over months
+- Other Infectious Diseases: clear infectious cause confirmed but symptoms do not fit Pneumonia, Sepsis, Meningitis, Malaria, Measles, or Diarrhea
+- Drowning: found near or in water, submersion event reported, water in airways, asphyxia
+- Road Traffic: history of vehicle collision, blunt or penetrating trauma, injuries consistent with impact
+- Falls: reported fall from height, blunt trauma injuries localized to impact sites
+- Fires: burn injuries, smoke inhalation, fire or explosion reported in history
+- Violent Death: injuries inconsistent with reported history, signs of physical abuse, assault reported
+- Poisonings: history of toxic substance ingestion (accidental or intentional), vomiting or altered consciousness after ingestion
+- Bite of Venomous Animal: witnessed or reported snake or scorpion bite, local envenomation signs, systemic toxicity
+- Other Cardiovascular Diseases: cardiac signs (murmur, cyanosis, oedema) without infection, trauma, or respiratory primary cause
+- Other Cancers: chronic progressive illness, palpable mass, unexplained weight loss, non-infectious, non-traumatic
+- Other Digestive Diseases: abdominal pathology without diarrhea — obstruction, perforation, intussusception, liver disease
+- Other Defined Causes of Child Deaths: etiology is clearly identified but does not fit any category above"""
+
 def strip_thoughts(text: str) -> str:
     """
     Remove <thought>...</thought> blocks from the model output.

@@ -17,17 +17,24 @@ if str(_REPO_ROOT) not in sys.path:
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 10      # used only when MODE == "demo"
+SAMPLE_SIZE         = 5      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None    # set to None for a different sample each time
+
+# ── Pinned cases (set to a list of case_id strings to run ONLY those cases) ───
+# IDs are plain numbers matching the dataset (e.g. "1002", "42", "107").
+# Example: PINNED_CASE_IDS = ["42", "107", "1002"]
+# Leave as [] to use normal MODE / SAMPLE_SIZE sampling.
+PINNED_CASE_IDS: list = ["1002"]
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _ROOT     = Path(__file__).resolve().parent.parent
 _DATA     = _ROOT / "data" / "patient_dossiers.json"
-_RESULTS  = _ROOT / "results"
-_PRED_CSV = _RESULTS / "predictions.csv"
-_METRICS  = _RESULTS / "metrics_summary.txt"
-_FAILED   = _RESULTS / "failed_cases.txt"
+_RESULTS     = _ROOT / "results"
+_PRED_CSV    = _RESULTS / "predictions.csv"
+_METRICS     = _RESULTS / "metrics_summary.txt"
+_FAILED      = _RESULTS / "failed_cases.txt"
+_AGENT_LOG   = _RESULTS / "agent_outputs.jsonl"   # full per-agent detail log
 
 # ── CSV column order ──────────────────────────────────────────────────────────
 _CSV_COLUMNS = [
@@ -135,6 +142,59 @@ def _log_failed(case_id: str, reason: str, path: Path) -> None:
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(f"case_id={case_id} | reason={reason}\n")
 
+def _write_agent_log(state: dict, path: Path) -> None:
+    """Append a full per-agent JSON record to the agent_outputs.jsonl file."""
+    import json as _json
+    a1 = state.get("agent1_output", {})
+    a2 = state.get("agent2_output", {})
+    a3 = state.get("agent3_output", {})
+    critique_raw = state.get("critique", "")
+    # Try to pretty-print the critic JSON verdict if it is parseable
+    try:
+        critique_parsed = _json.loads(critique_raw)
+    except Exception:
+        critique_parsed = critique_raw
+
+    record = {
+        "case_id":       state.get("case_id", ""),
+        "ground_truth":  state.get("ground_truth", ""),
+        "agent1": {
+            "name":      a1.get("agent_name", "agent1_evidence_collector"),
+            "diagnosis": a1.get("diagnosis", "Unknown"),
+            "confidence":a1.get("confidence", "N/A"),
+            "reasoning": a1.get("primary_reasoning", ""),
+            "alternative_rejected": a1.get("alternative_rejected", ""),
+            "rejection_reason":     a1.get("rejection_reason", ""),
+        },
+        "agent2": {
+            "name":      a2.get("agent_name", "agent2_eliminator"),
+            "diagnosis": a2.get("diagnosis", "Unknown"),
+            "confidence":a2.get("confidence", "N/A"),
+            "reasoning": a2.get("primary_reasoning", ""),
+            "eliminated_count": a2.get("eliminated_count", ""),
+            "pivot_evidence":   a2.get("pivot_evidence", ""),
+        },
+        "agent3": {
+            "name":      a3.get("agent_name", "agent3_timeline_analyst"),
+            "diagnosis": a3.get("diagnosis", "Unknown"),
+            "confidence":a3.get("confidence", "N/A"),
+            "reasoning": a3.get("primary_reasoning", ""),
+            "timeline_duration":   a3.get("timeline_duration", ""),
+            "nutritional_modifier": a3.get("nutritional_modifier", ""),
+        },
+        "critic_verdict": critique_parsed,
+        "final": {
+            "mapped_category": state.get("mapped_category", ""),
+            "confidence_score": state.get("confidence_score", 0),
+            "final_reasoning":  state.get("final_reasoning", ""),
+            "winning_agent":    state.get("winning_agent", ""),
+        },
+        "is_correct": 1 if str(state.get("mapped_category","")).strip().lower() == str(state.get("ground_truth","")).strip().lower() else 0,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(_json.dumps(record, ensure_ascii=False) + "\n")
+
 def _compute_and_print_metrics(rows: list, output_path: Path) -> None:
     if not rows: return
     total = len(rows)
@@ -162,9 +222,20 @@ def main() -> None:
     from agents.data_loader import load_dossiers
     from agents.graph import run_single_case
     cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED)
+
+    # ── Filter to pinned cases if specified ───────────────────────────────────
+    if PINNED_CASE_IDS:
+        pinned_set = {str(c).strip() for c in PINNED_CASE_IDS}
+        cases = [c for c in cases if str(c.get("case_id", "")).strip() in pinned_set]
+        # If pinned IDs aren't in the demo sample, pull from full dataset
+        if not cases:
+            all_cases = load_dossiers(str(_DATA), mode="full", sample_size=0, seed=RANDOM_SEED)
+            cases = [c for c in all_cases if str(c.get("case_id", "")).strip() in pinned_set]
+        print(f"[PINNED] Running {len(cases)} pinned case(s): {PINNED_CASE_IDS}")
+
     total_cases = len(cases)
     _RESULTS.mkdir(parents=True, exist_ok=True)
-    for f in (_PRED_CSV, _FAILED):
+    for f in (_PRED_CSV, _FAILED, _AGENT_LOG):
         if f.exists(): f.unlink()
 
     csv_buffer = []
@@ -181,6 +252,7 @@ def main() -> None:
             row = _build_csv_row(final_state)
             csv_buffer.append(row)
             _append_to_csv(csv_buffer, _PRED_CSV, write_header=first_write)
+            _write_agent_log(final_state, _AGENT_LOG)   # ← full per-agent detail
             first_write = False
             csv_buffer = []
         except Exception as exc:
