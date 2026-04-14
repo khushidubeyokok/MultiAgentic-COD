@@ -46,7 +46,13 @@ _AGENT1_SYSTEM = (
     "You never guess first and work backward; you always build up from the facts."
 )
 
-_AGENT1_PROTOCOL = """### REASONING PROTOCOL ###
+_AGENT1_PROTOCOL = """⚠️ IMPORTANT BIAS WARNING: Pneumonia is one of 21 possible categories and should only
+be chosen if respiratory symptoms are CLEARLY PRIMARY and ACUTE (sudden onset, hours to days).
+Do NOT default to Pneumonia simply because a cough or breathing difficulty is mentioned
+alongside another primary illness. If the child has been sick for weeks, or has chronic
+markers (wasting, thrush, recurrent illness), consider other categories first.
+
+### REASONING PROTOCOL ###
 Follow these steps in order. Do not skip any.
 
 STEP 1 — SYMPTOM INVENTORY:
@@ -58,6 +64,17 @@ Group those symptoms into a recognizable clinical syndrome (e.g., "febrile illne
 STEP 2b — PRIMACY CHECK:
 Which symptom or symptom cluster most likely represents the PRIMARY presenting complaint — i.e., what the child was most likely brought to hospital for?
 ⚠️ CRITICAL: In infants and young children, convulsions, stiff neck, and labored breathing can be SECONDARY COMPLICATIONS of severe dehydration from diarrhea, or of metabolic disturbance — NOT necessarily independent CNS or respiratory disease. If prominent diarrhea is present alongside neurological or respiratory signs, do NOT automatically anchor on the neurological/respiratory syndrome. Ask: could the diarrhea be the primary driver and the other signs be complications?
+
+⚠️ AIDS CHECK: Before finalizing any diagnosis, explicitly scan the dossier for these AIDS markers:
+  - Oral thrush or mouth sores
+  - Mother known HIV-positive
+  - Recurrent infections (especially repeated pneumonia episodes)
+  - Chronic diarrhea lasting >1 month
+  - Failure to thrive or wasting over months
+  - Persistent swollen lymph nodes
+If 2 or more of these markers are present in the dossier, you MUST seriously consider AIDS
+over any acute infectious diagnosis (Pneumonia, Sepsis, Meningitis). AIDS is a chronic
+wasting illness, not a sudden acute event.
 
 STEP 3 — CATEGORY MATCH:
 Using the CATEGORY REFERENCE below, match the PRIMARY syndrome (from Step 2b) to the most fitting PHMRC category. Be specific about which clinical features drove your match.
@@ -84,7 +101,13 @@ _AGENT2_SYSTEM = (
     "your job is to aggressively rule out what is NOT supported and converge on what remains."
 )
 
-_AGENT2_PROTOCOL = f"""### REASONING PROTOCOL ###
+_AGENT2_PROTOCOL = f"""⚠️ IMPORTANT BIAS WARNING: Pneumonia is one of 21 possible categories and should only
+be chosen if respiratory symptoms are CLEARLY PRIMARY and ACUTE (sudden onset, hours to days).
+Do NOT default to Pneumonia simply because a cough or breathing difficulty is mentioned
+alongside another primary illness. If the child has been sick for weeks, or has chronic
+markers (wasting, thrush, recurrent illness), consider other categories first.
+
+### REASONING PROTOCOL ###
 Follow these steps in order. Do not skip any.
 
 STEP 1 — MASS ELIMINATION:
@@ -119,7 +142,13 @@ _AGENT3_SYSTEM = (
     "and you let the trajectory — not just the snapshot — drive your diagnosis."
 )
 
-_AGENT3_PROTOCOL = """### REASONING PROTOCOL ###
+_AGENT3_PROTOCOL = """⚠️ IMPORTANT BIAS WARNING: Pneumonia is one of 21 possible categories and should only
+be chosen if respiratory symptoms are CLEARLY PRIMARY and ACUTE (sudden onset, hours to days).
+Do NOT default to Pneumonia simply because a cough or breathing difficulty is mentioned
+alongside another primary illness. If the child has been sick for weeks, or has chronic
+markers (wasting, thrush, recurrent illness), consider other categories first.
+
+### REASONING PROTOCOL ###
 Follow these steps in order. Do not skip any.
 
 STEP 1 — BASELINE STATE:

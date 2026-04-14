@@ -17,7 +17,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 60      # used only when MODE == "demo"
+SAMPLE_SIZE         = 75      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None    # set to None for a different sample each time
 

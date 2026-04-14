@@ -113,7 +113,7 @@ Output a single JSON object:
 
 Valid categories: {PHMRC_LIST}
 
-⚠️  CONSTRAINT: Your mapped_category MUST be one of the diagnoses already proposed by the three agents or the critic's recommended_diagnosis. Do NOT output a different category that no agent argued for. If agents disagree, pick the one whose reasoning is most internally consistent with the dossier — do not hedge to a vague catch-all.
+PREFERENCE RULE: Prefer diagnoses already proposed by the agents or critic if they are well-supported by the dossier. However, if the dossier clearly and unambiguously points to a different PHMRC category that no agent considered (e.g. all agents said Pneumonia but the dossier contains strong AIDS markers), you MAY override — but you MUST explicitly state in final_reasoning why the agents' proposals were collectively insufficient and what specific dossier evidence drives your override. Do not hedge to a vague catch-all.
 
 After the JSON, repeat: [FINAL_DIAGNOSIS] Category [/FINAL_DIAGNOSIS]"""
 

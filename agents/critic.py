@@ -71,6 +71,15 @@ Output this JSON:
 Set flag_for_review to true if two or more agents give VERY DIFFERENT categories with
 similarly strong reasoning (genuine clinical ambiguity).
 
+⚠️  EVALUATOR BIAS WARNING: You must NOT default to recommending agent2_eliminator simply
+because elimination logic sounds confident. Evaluate all three agents independently and
+equally. Agent 2's elimination approach is prone to overconfidence — it can eliminate
+correctly and still converge on the wrong surviving category. Prefer the agent whose cited
+evidence is MOST SPECIFIC and MOST DIRECTLY QUOTED from the dossier text.
+If Agent 1 or Agent 3 cites a specific, unmistakable finding (e.g. "oral thrush documented",
+"stiff neck observed", "fall from tree reported") that directly maps to one category, that
+agent should be favoured over Agent 2's abstract elimination chain.
+
 OUTPUT ONLY THE JSON OBJECT. No preamble, no explanation, no markdown fences."""
 
 

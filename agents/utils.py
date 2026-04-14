@@ -18,27 +18,48 @@ PHMRC_CATEGORIES = sorted([
     "Road Traffic",
 ], key=len, reverse=True)
 
-PHMRC_CATEGORY_GUIDE = """- Pneumonia: cough, fast or difficult breathing, chest indrawing, respiratory distress, fever, crackling breath sounds
-- Sepsis: sudden rapid deterioration, high fever or abnormally low temperature, signs of multiple organ involvement, no clear focal infection site
-- Meningitis: neck stiffness, bulging fontanelle, photophobia, seizures, high fever, altered consciousness, kernig/brudzinski signs
-- Encephalitis: brain inflammation, seizures, altered or fluctuating consciousness, fever, NO neck stiffness (distinguishes from meningitis)
-- Malaria: cyclical or spiking high fever, residence or travel in endemic area, anaemia, splenomegaly, rapid deterioration
-- Diarrhea/Dysentery: watery or bloody stools, severe dehydration, sunken eyes, skin tenting, rapid weight loss, cramping
-- Measles: maculopapular rash starting on face spreading downward, high fever, cough, conjunctivitis, Koplik spots inside mouth
-- Hemorrhagic fever: bleeding from multiple sites (nose, gums, skin), high fever, rash, very rapid deterioration, no obvious trauma
-- AIDS: chronic wasting, recurrent or unusual infections, oral thrush, persistent lymphadenopathy, failure to thrive over months
-- Other Infectious Diseases: clear infectious cause confirmed but symptoms do not fit Pneumonia, Sepsis, Meningitis, Malaria, Measles, or Diarrhea
-- Drowning: found near or in water, submersion event reported, water in airways, asphyxia
-- Road Traffic: history of vehicle collision, blunt or penetrating trauma, injuries consistent with impact
-- Falls: reported fall from height, blunt trauma injuries localized to impact sites
-- Fires: burn injuries, smoke inhalation, fire or explosion reported in history
-- Violent Death: injuries inconsistent with reported history, signs of physical abuse, assault reported
-- Poisonings: history of toxic substance ingestion (accidental or intentional), vomiting or altered consciousness after ingestion
-- Bite of Venomous Animal: witnessed or reported snake or scorpion bite, local envenomation signs, systemic toxicity
-- Other Cardiovascular Diseases: cardiac signs (murmur, cyanosis, oedema) without infection, trauma, or respiratory primary cause
-- Other Cancers: chronic progressive illness, palpable mass, unexplained weight loss, non-infectious, non-traumatic
-- Other Digestive Diseases: abdominal pathology without diarrhea — obstruction, perforation, intussusception, liver disease
-- Other Defined Causes of Child Deaths: etiology is clearly identified but does not fit any category above"""
+PHMRC_CATEGORY_GUIDE = """- Pneumonia: ACUTE illness (hours to days), cough PLUS fast/difficult breathing as the PRIMARY complaint, chest indrawing, fever, crackling breath sounds.
+  ⛔ CAUTION — DO NOT diagnose Pneumonia if: the illness is chronic (>2 weeks of progressive decline without acute respiratory crisis), OR there is a documented chronic underlying condition (HIV/AIDS, cancer, severe malnutrition) — consider AIDS, Other Cancers, or Other Defined Causes instead. A cough mentioned alongside another primary illness does NOT make this Pneumonia.
+
+- Sepsis: SUDDEN rapid multi-organ deterioration, high or abnormally low temperature, no single clear focal infection site — the systemic response overwhelms any focal diagnosis.
+
+- Meningitis: STIFF NECK (nuchal rigidity) is the KEY sign. Stiff neck + fever + seizures/altered consciousness = Meningitis. Bulging fontanelle, photophobia, Kernig/Brudzinski signs confirm. ⛔ If stiff neck is documented, diagnose Meningitis NOT Encephalitis.
+
+- Encephalitis: Fever + seizures + altered or fluctuating consciousness — but ⛔ NO STIFF NECK. Encephalitis does not present with nuchal rigidity. If stiff neck is present in the dossier, choose Meningitis instead. Brain inflammation without meningeal signs.
+
+- Malaria: Cyclical or spiking high fever, history of residence/travel in malaria-endemic region, anaemia, splenomegaly; rapid deterioration in young child.
+
+- Diarrhea/Dysentery: Watery or bloody stools as PRIMARY complaint, severe dehydration, sunken eyes, skin tenting, rapid weight loss, cramping. NOTE: if diarrhea and CNS/respiratory signs co-occur, the CNS/respiratory signs may be SECONDARY dehydration complications — diarrhea is likely the primary cause.
+
+- Measles: Maculopapular rash starting on face spreading downward, high fever, cough, conjunctivitis, Koplik spots inside mouth.
+
+- Hemorrhagic fever: Spontaneous bleeding from multiple sites (nose, gums, skin, urine/stool) with high fever; very rapid deterioration; no obvious trauma or chronic illness.
+
+- AIDS: KEY MARKERS — oral thrush, recurrent infections (especially pneumonia that keeps recurring), chronic diarrhea >1 month, failure to thrive over months, mother known HIV-positive, persistent lymphadenopathy. ⚠️ If ANY 2+ of these appear alongside respiratory symptoms, strongly consider AIDS over Pneumonia. AIDS is a chronic, wasting illness — not a sudden acute event.
+
+- Other Infectious Diseases: Confirmed infectious cause (e.g. typhoid, TB, pertussis, measles complications) that does NOT fit Pneumonia, Sepsis, Meningitis, Malaria, Measles, Diarrhea, or AIDS. Clear pathogen or syndrome but misfit for specific categories.
+
+- Drowning: Found in or near water, submersion event reported by witness, water in airways, asphyxia pattern.
+
+- Road Traffic: History of vehicle collision, blunt/penetrating trauma from road accident, injuries consistent with impact forces.
+
+- Falls: Child found injured after a fall, caregiver reports fall or collapse from height. Head injury common. ⚠️ Even if neurological symptoms follow the fall, the cause is the FALL — classify as Falls, not CNS disease. A reported fall from height that caused injury = Falls.
+
+- Fires: Burn injuries, smoke inhalation, fire or explosion reported in history.
+
+- Violent Death: Physical evidence of assault or abuse — injuries inconsistent with reported history, signs of beating or blunt force, homicide, assault documented.
+
+- Poisonings: History of toxic substance ingestion (accidental or intentional), or strongly suspected ingestion — vomiting/altered consciousness after exposure without other explanation.
+
+- Bite of Venomous Animal: Witnessed or reported snake or scorpion bite, local envenomation signs (swelling, necrosis), systemic toxicity.
+
+- Other Cardiovascular Diseases: Cardiac signs (murmur, cyanosis, oedema, arrhythmia) as the PRIMARY pathology — without infection, trauma, or respiratory disease being primary. Congenital heart disease is included here.
+
+- Other Cancers: Chronic progressive illness over WEEKS TO MONTHS, palpable abdominal or lymph node mass, unexplained persistent weight loss with NO clear infectious fever pattern. Child was unwell long before death. Non-infectious, non-traumatic, non-cardiac. ⚠️ Chronic cough + weight loss + no acute fever = consider Other Cancers, not Pneumonia.
+
+- Other Digestive Diseases: Abdominal pathology WITHOUT diarrhea as the primary presentation. Includes bowel obstruction, intussusception (sudden colicky pain in infant), appendicitis, perforation, liver disease (jaundice), hepatitis. Vomiting may be prominent but diarrhea is NOT the main issue.
+
+- Other Defined Causes of Child Deaths: Specific identifiable etiology (prematurity, birth asphyxia, congenital anomaly, neonatal condition) that is clearly documented but does not fit any category above."""
 
 # ── Fuzzy alias table ─────────────────────────────────────────────────────────
 # Maps common misspellings, abbreviations, and variations → canonical category name.
