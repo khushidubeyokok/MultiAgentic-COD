@@ -17,7 +17,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 5      # used only when MODE == "demo"
+SAMPLE_SIZE         = 60      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None    # set to None for a different sample each time
 
@@ -25,7 +25,7 @@ RANDOM_SEED         = None    # set to None for a different sample each time
 # IDs are plain numbers matching the dataset (e.g. "1002", "42", "107").
 # Example: PINNED_CASE_IDS = ["42", "107", "1002"]
 # Leave as [] to use normal MODE / SAMPLE_SIZE sampling.
-PINNED_CASE_IDS: list = ["1002"]
+PINNED_CASE_IDS: list = []
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _ROOT     = Path(__file__).resolve().parent.parent
@@ -240,6 +240,7 @@ def main() -> None:
 
     csv_buffer = []
     first_write = True
+    correct_count = 0
     start_time = time.time()
 
     for idx, case in enumerate(cases, start=1):
@@ -250,6 +251,7 @@ def main() -> None:
             final_state = run_single_case(case)
             _print_case_result(final_state)
             row = _build_csv_row(final_state)
+            correct_count += int(row["is_correct"])
             csv_buffer.append(row)
             _append_to_csv(csv_buffer, _PRED_CSV, write_header=first_write)
             _write_agent_log(final_state, _AGENT_LOG)   # ← full per-agent detail
@@ -263,7 +265,8 @@ def main() -> None:
             elapsed = time.time() - start_time
             avg = elapsed / idx
             eta = avg * (total_cases - idx)
-            print(f"[PROGRESS] {idx}/{total_cases} | ETA: {eta/60:.1f} min")
+            acc = correct_count / idx
+            print(f"[PROGRESS] {idx}/{total_cases} | Accuracy: {correct_count}/{idx} ({acc:.1%}) | ETA: {eta/60:.1f} min")
 
         if idx < total_cases: time.sleep(DELAY_BETWEEN_CASES)
 
