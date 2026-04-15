@@ -35,6 +35,29 @@ PHMRC_LIST = ", ".join(PHMRC_CATEGORIES)
 
 _CATEGORY_HEADER = f"\n\n### CATEGORY REFERENCE ###\n{PHMRC_CATEGORY_GUIDE}\n"
 
+# ── Confusion guard — appended to every agent before JSON output ───────────────
+_CONFUSION_GUARD = """
+### BEFORE YOU OUTPUT — CHECK THESE COMMON MISTAKES ###
+1. SEPSIS TRAP: Are you choosing Sepsis only because you see fever + deterioration?
+   If yes, re-examine: Is the patient from Africa? → Consider Malaria first.
+   Are there respiratory symptoms? → Consider Pneumonia.
+   Is there neck stiffness? → Consider Meningitis.
+   Sepsis is the answer only when nothing else fits.
+
+2. MENINGITIS TRAP: Is stiff neck EXPLICITLY stated in the dossier?
+   If NO stiff neck documented → Do NOT diagnose Meningitis.
+   Choose Encephalitis (if seizures + altered consciousness) or Sepsis instead.
+
+3. HEMORRHAGIC FEVER TRAP: Is there spontaneous bleeding from MULTIPLE sites?
+   If only ONE bleeding site, or fever without confirmed multi-site bleeding → Not Hemorrhagic fever.
+
+4. MALARIA REMINDER: Is the patient from sub-Saharan Africa with undifferentiated fever?
+   If yes → Malaria is your first candidate, not Sepsis.
+
+5. OTHER DIGESTIVE TRAP: Is the primary complaint abdominal pain WITHOUT diarrhea?
+   Jaundice, vomiting alone, or colicky pain without loose stools = Other Digestive Diseases, not Sepsis.
+"""
+
 # ──────────────────────────────────────────────────────────────────────────────
 # AGENT 1 — THE EVIDENCE COLLECTOR 
 # Protocol: bottom-up from symptoms → syndromes → category
@@ -83,6 +106,10 @@ STEP 4 — ALTERNATIVE & REJECTION:
 Name exactly one alternative PHMRC category you considered, and give one clear reason why you are rejecting it in favour of your primary answer.
 
 STEP 5 — JSON OUTPUT:
+Before writing your JSON, revisit the confusion guard below.
+"""
+_AGENT1_PROTOCOL += _CONFUSION_GUARD
+_AGENT1_PROTOCOL += """
 Output a single JSON object in this exact schema — nothing before or after it:
 {"diagnosis": "exact category name", "confidence": "High/Medium/Low", "primary_reasoning": "concise chain of evidence → syndrome → category", "alternative_rejected": "category name", "rejection_reason": "one sentence"}
 
@@ -124,6 +151,10 @@ STEP 3 — PIVOT TEST:
 State what single piece of evidence, if present, would have changed your answer to a different category.
 
 STEP 4 — JSON OUTPUT:
+Before writing your JSON, revisit the confusion guard below.
+"""
+_AGENT2_PROTOCOL += _CONFUSION_GUARD
+_AGENT2_PROTOCOL += """
 Output a single JSON object in this exact schema — nothing before or after it:
 {{"diagnosis": "exact category name", "confidence": "High/Medium/Low", "primary_reasoning": "concise description of what survived elimination and why", "eliminated_count": <number>, "pivot_evidence": "what would have changed the answer"}}
 
@@ -170,6 +201,10 @@ STEP 6 — CATEGORY FIT:
 Based on this complete clinical trajectory, which PHMRC category best fits the overall story?
 
 STEP 7 — JSON OUTPUT:
+Before writing your JSON, revisit the confusion guard below.
+"""
+_AGENT3_PROTOCOL += _CONFUSION_GUARD
+_AGENT3_PROTOCOL += """
 Output a single JSON object in this exact schema — nothing before or after it:
 {"diagnosis": "exact category name", "confidence": "High/Medium/Low", "primary_reasoning": "concise temporal narrative that justifies the category", "timeline_duration": "e.g. acute <72h / subacute 3-14d / chronic >2wk", "nutritional_modifier": "Yes/No — brief note if relevant"}
 

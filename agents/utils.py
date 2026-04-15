@@ -22,20 +22,27 @@ PHMRC_CATEGORY_GUIDE = """- Pneumonia: ACUTE illness (hours to days), cough PLUS
   ⛔ CAUTION — DO NOT diagnose Pneumonia if: the illness is chronic (>2 weeks of progressive decline without acute respiratory crisis), OR there is a documented chronic underlying condition (HIV/AIDS, cancer, severe malnutrition) — consider AIDS, Other Cancers, or Other Defined Causes instead. A cough mentioned alongside another primary illness does NOT make this Pneumonia.
 
 - Sepsis: SUDDEN rapid multi-organ deterioration, high or abnormally low temperature, no single clear focal infection site — the systemic response overwhelms any focal diagnosis.
+  ⛔ CRITICAL WARNING — Do NOT default to Sepsis just because you see fever. If the patient is from sub-Saharan Africa (Tanzania, Uganda, Kenya, Nigeria, Malawi, Mozambique, Ethiopia, etc.) AND has fever without clear bacterial source → consider Malaria FIRST. Sepsis should be your answer only after you have ruled out Malaria, Pneumonia, Meningitis, and Diarrhea.
 
-- Meningitis: STIFF NECK (nuchal rigidity) is the KEY sign. Stiff neck + fever + seizures/altered consciousness = Meningitis. Bulging fontanelle, photophobia, Kernig/Brudzinski signs confirm. ⛔ If stiff neck is documented, diagnose Meningitis NOT Encephalitis.
+- Meningitis: STIFF NECK (nuchal rigidity) is the KEY sign. Stiff neck + fever + seizures/altered consciousness = Meningitis. Bulging fontanelle, photophobia, Kernig/Brudzinski signs confirm.
+  ⛔ If stiff neck is NOT explicitly documented in the dossier, do NOT diagnose Meningitis. Seizures + fever WITHOUT stiff neck = Encephalitis, not Meningitis.
 
-- Encephalitis: Fever + seizures + altered or fluctuating consciousness — but ⛔ NO STIFF NECK. Encephalitis does not present with nuchal rigidity. If stiff neck is present in the dossier, choose Meningitis instead. Brain inflammation without meningeal signs.
+- Encephalitis: Fever + seizures + altered or fluctuating consciousness — but NO STIFF NECK. If stiff neck is present in the dossier, choose Meningitis instead.
 
-- Malaria: Cyclical or spiking high fever, history of residence/travel in malaria-endemic region, anaemia, splenomegaly; rapid deterioration in young child.
+- Malaria: Cyclical or spiking high fever, history of residence/travel in malaria-endemic region (sub-Saharan Africa, South/Southeast Asia), anaemia, splenomegaly; rapid deterioration in young child.
+  ⚠️ KEY RULE: In sub-Saharan African cases with undifferentiated fever and no clear bacterial source, Malaria is statistically far more likely than Sepsis. If location is African and primary complaint is high fever → Malaria is your top candidate.
 
-- Diarrhea/Dysentery: Watery or bloody stools as PRIMARY complaint, severe dehydration, sunken eyes, skin tenting, rapid weight loss, cramping. NOTE: if diarrhea and CNS/respiratory signs co-occur, the CNS/respiratory signs may be SECONDARY dehydration complications — diarrhea is likely the primary cause.
+- Diarrhea/Dysentery: Watery or bloody stools as PRIMARY complaint, severe dehydration, sunken eyes, skin tenting, rapid weight loss, cramping.
+  ⛔ If diarrhea is mentioned but is NOT the primary complaint, do not diagnose this. Also: if diarrhea co-occurs with CNS/respiratory signs, the CNS signs may be secondary dehydration complications — Diarrhea/Dysentery is still the primary diagnosis.
 
-- Measles: Maculopapular rash starting on face spreading downward, high fever, cough, conjunctivitis, Koplik spots inside mouth.
+- Measles: Maculopapular RASH starting on face spreading downward, high fever, cough, conjunctivitis, Koplik spots inside mouth.
+  ⛔ A rash MUST be explicitly documented. Fever + cough alone is NOT Measles. Without documented rash, choose Pneumonia or Other Infectious Diseases.
 
-- Hemorrhagic fever: Spontaneous bleeding from multiple sites (nose, gums, skin, urine/stool) with high fever; very rapid deterioration; no obvious trauma or chronic illness.
+- Hemorrhagic fever: SPONTANEOUS BLEEDING from MULTIPLE SITES (nose, gums, skin, urine/stool) with high fever; very rapid deterioration; no obvious trauma or chronic illness.
+  ⛔ Bleeding from ONE site only does NOT qualify. Fever alone does NOT qualify. Both multi-site bleeding AND fever must be present simultaneously.
 
-- AIDS: KEY MARKERS — oral thrush, recurrent infections (especially pneumonia that keeps recurring), chronic diarrhea >1 month, failure to thrive over months, mother known HIV-positive, persistent lymphadenopathy. ⚠️ If ANY 2+ of these appear alongside respiratory symptoms, strongly consider AIDS over Pneumonia. AIDS is a chronic, wasting illness — not a sudden acute event.
+- AIDS: KEY MARKERS — oral thrush, recurrent infections (especially pneumonia that keeps recurring), chronic diarrhea >1 month, failure to thrive over months, mother known HIV-positive, persistent lymphadenopathy.
+  ⚠️ If ANY 2+ of these appear alongside respiratory symptoms, strongly consider AIDS over Pneumonia. AIDS is a chronic, wasting illness — not a sudden acute event.
 
 - Other Infectious Diseases: Confirmed infectious cause (e.g. typhoid, TB, pertussis, measles complications) that does NOT fit Pneumonia, Sepsis, Meningitis, Malaria, Measles, Diarrhea, or AIDS. Clear pathogen or syndrome but misfit for specific categories.
 
@@ -43,7 +50,8 @@ PHMRC_CATEGORY_GUIDE = """- Pneumonia: ACUTE illness (hours to days), cough PLUS
 
 - Road Traffic: History of vehicle collision, blunt/penetrating trauma from road accident, injuries consistent with impact forces.
 
-- Falls: Child found injured after a fall, caregiver reports fall or collapse from height. Head injury common. ⚠️ Even if neurological symptoms follow the fall, the cause is the FALL — classify as Falls, not CNS disease. A reported fall from height that caused injury = Falls.
+- Falls: Child found injured after a fall, caregiver reports fall or collapse from height. Head injury common.
+  ⚠️ Even if neurological symptoms follow the fall, the cause is the FALL — classify as Falls, not CNS disease.
 
 - Fires: Burn injuries, smoke inhalation, fire or explosion reported in history.
 
@@ -53,11 +61,13 @@ PHMRC_CATEGORY_GUIDE = """- Pneumonia: ACUTE illness (hours to days), cough PLUS
 
 - Bite of Venomous Animal: Witnessed or reported snake or scorpion bite, local envenomation signs (swelling, necrosis), systemic toxicity.
 
-- Other Cardiovascular Diseases: Cardiac signs (murmur, cyanosis, oedema, arrhythmia) as the PRIMARY pathology — without infection, trauma, or respiratory disease being primary. Congenital heart disease is included here.
+- Other Cardiovascular Diseases: Cardiac signs (murmur, cyanosis, oedema, arrhythmia) as the PRIMARY pathology — without infection, trauma, or respiratory disease being primary.
 
-- Other Cancers: Chronic progressive illness over WEEKS TO MONTHS, palpable abdominal or lymph node mass, unexplained persistent weight loss with NO clear infectious fever pattern. Child was unwell long before death. Non-infectious, non-traumatic, non-cardiac. ⚠️ Chronic cough + weight loss + no acute fever = consider Other Cancers, not Pneumonia.
+- Other Cancers: Chronic progressive illness over WEEKS TO MONTHS, palpable abdominal or lymph node mass, unexplained persistent weight loss with NO clear infectious fever pattern. Child was unwell long before death.
+  ⚠️ Chronic cough + weight loss + no acute fever = consider Other Cancers, not Pneumonia.
 
-- Other Digestive Diseases: Abdominal pathology WITHOUT diarrhea as the primary presentation. Includes bowel obstruction, intussusception (sudden colicky pain in infant), appendicitis, perforation, liver disease (jaundice), hepatitis. Vomiting may be prominent but diarrhea is NOT the main issue.
+- Other Digestive Diseases: Abdominal pathology WITHOUT diarrhea as the primary presentation. Includes bowel obstruction, intussusception (sudden colicky pain in infant), appendicitis, perforation, liver disease (jaundice), hepatitis.
+  ⚠️ KEY DISTINGUISHER from Diarrhea/Dysentery: diarrhea is NOT the main complaint here. Abdominal pain, vomiting, jaundice without diarrhea = Other Digestive Diseases.
 
 - Other Defined Causes of Child Deaths: Specific identifiable etiology (prematurity, birth asphyxia, congenital anomaly, neonatal condition) that is clearly documented but does not fit any category above."""
 

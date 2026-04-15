@@ -129,31 +129,21 @@ def _secondary_note(ranked: list[tuple[str, int]]) -> str:
 
 def preprocess_dossier(raw_text: str) -> str:
     """
-    Main entry point. Cleans and annotates a raw dossier string.
+    Main entry point. Annotates a raw dossier string.
 
     Returns a preprocessed dossier with:
-    - Negative findings removed
     - A ranked domain evidence header prepended
     - A secondary symptom caution note (if applicable)
+    - The FULL original dossier text preserved (negative findings are kept
+      because "no stiff neck", "no rash" etc. are diagnostically critical)
     """
     if not raw_text or not raw_text.strip():
         return raw_text
 
-    # Step 1 — Strip negative lines
-    lines = raw_text.splitlines()
-    clean_lines = []
-    stripped_count = 0
-    for line in lines:
-        if _is_negative_line(line):
-            stripped_count += 1
-        else:
-            clean_lines.append(line)
-    clean_text = "\n".join(clean_lines)
+    # Step 1 — Score domains on the FULL, unmodified dossier text
+    ranked = _score_domains(raw_text)
 
-    # Step 2 — Score domains on cleaned text
-    ranked = _score_domains(clean_text)
-
-    # Step 3 — Build the header block
+    # Step 2 — Build the header block
     header_parts = ["### PREPROCESSED DOSSIER SUMMARY ###"]
     if ranked:
         header_parts.append("Evidence domain ranking (strongest → weakest):")
@@ -168,12 +158,7 @@ def preprocess_dossier(raw_text: str) -> str:
         header_parts.append("")
         header_parts.append(sec_note)
 
-    if stripped_count:
-        header_parts.append(
-            f"\n[Note: {stripped_count} negative-finding line(s) removed from dossier to reduce noise.]"
-        )
-
     header_parts.append("### END SUMMARY — FULL DOSSIER FOLLOWS ###\n")
     header = "\n".join(header_parts)
 
-    return f"{header}\n{clean_text}"
+    return f"{header}\n{raw_text}"
