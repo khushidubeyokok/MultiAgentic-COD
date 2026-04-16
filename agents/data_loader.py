@@ -89,6 +89,7 @@ def load_dossiers(
     mode: str = "demo",
     sample_size: int = 30,
     seed: int = 42,
+    exclude_ids: set = None,
 ) -> list:
     """
     Load patient dossiers from a JSON file.
@@ -118,6 +119,9 @@ def load_dossiers(
 
     # Apply field defaults to every entry
     cases: list = [_apply_defaults(entry) for entry in raw]
+
+    if exclude_ids:
+        cases = [c for c in cases if str(c.get("case_id", "")) not in exclude_ids]
 
     if mode == "full":
         result = cases

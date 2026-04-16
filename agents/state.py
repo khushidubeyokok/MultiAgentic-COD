@@ -20,7 +20,11 @@ class VAState(TypedDict):
       - mapped_category : one of the 21 PHMRC categories
       - confidence_score: 0–100 integer
       - final_reasoning : adjudicator's explanation
+      - broad_group     : broad triage category ("External/Trauma", etc.)
     """
+
+    # ── Triage / Broad Group (set by Stage 1) ───────────────────────────────
+    broad_group: str      # "External/Trauma", "Infectious/Disease", or "Chronic/Systemic/Other"
 
     # ── Input fields (set before graph invocation) ──────────────────────────
     case_id: str          # e.g. "12345"
@@ -29,19 +33,17 @@ class VAState(TypedDict):
     full_dossier: str     # complete dossier text passed to every agent
 
     # ── Agent outputs (each is a dict matching the agent output schema) ─────
-    # Schema:
+    # Standard Schema:
     # {
     #   "agent_name":             str,
     #   "diagnosis":              str,   # must be one of the 21 PHMRC categories
     #   "confidence":             str,   # exactly "High", "Medium", or "Low"
     #   "primary_reasoning":      str,
-    #   "supporting_evidence":    list[str],
-    #   "contradicting_evidence": list[str],
-    #   "differential_considered":list[str],
     #   # only present on parse failure:
     #   "error":                  bool,
     #   "raw_response":           str,
     # }
+    # Note: Agent 2 (Symptom Scorer) adds 'scores' (dict) and 'top3' (list).
     agent1_output: dict   # Pediatric Infectious Disease Specialist
     agent2_output: dict   # Pediatric Intensivist
     agent3_output: dict   # Pediatric Trauma & Nutritional Medicine Specialist

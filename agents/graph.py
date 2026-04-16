@@ -22,6 +22,7 @@ from agents.state import VAState
 from agents.agents import agent1_node, agent2_node, agent3_node
 from agents.critic import critic_node
 from agents.adjudicator import adjudicator_node
+from agents.stage1 import stage1_node
 from agents.preprocessor import preprocess_dossier
 
 # ── Retry wrapper for transient API errors ───────────────────────────────────
@@ -95,35 +96,33 @@ def build_graph():
     """
     Construct and compile the full LangGraph StateGraph.
 
-    Fan-out (parallel):  START → agent1_node, agent2_node, agent3_node
-    Fan-in / join:       all three agents → critic_node
-    Sequential:          critic_node → adjudicator_node → END
-
-    LangGraph automatically waits for all incoming edges to a node before
-    executing it, so critic_node acts as the implicit join point.
-
-    Returns the compiled graph (ready for .invoke()).
+    Topology:
+    START → stage1_node → parallel agents → critic_node → adjudicator_node → END
     """
     builder = StateGraph(VAState)
 
     # ── Register nodes ────────────────────────────────────────────────────────
+    builder.add_node("stage1_node", stage1_node)
     builder.add_node("agent1_node", _with_retry(agent1_node))
     builder.add_node("agent2_node", _with_retry(agent2_node))
     builder.add_node("agent3_node", _with_retry(agent3_node))
     builder.add_node("critic_node", critic_node)
     builder.add_node("adjudicator_node", adjudicator_node)
 
-    # ── Fan-out: START → parallel agents ─────────────────────────────────────
-    builder.add_edge(START, "agent1_node")
-    builder.add_edge(START, "agent2_node")
-    builder.add_edge(START, "agent3_node")
+    # ── Edges ────────────────────────────────────────────────────────────────
+    builder.add_edge(START, "stage1_node")
+    
+    # Fan-out after Triage
+    builder.add_edge("stage1_node", "agent1_node")
+    builder.add_edge("stage1_node", "agent2_node")
+    builder.add_edge("stage1_node", "agent3_node")
 
-    # ── Fan-in: all agents → critic (implicit join — waits for all three) ────
+    # Fan-in: all agents → critic
     builder.add_edge("agent1_node", "critic_node")
     builder.add_edge("agent2_node", "critic_node")
     builder.add_edge("agent3_node", "critic_node")
 
-    # ── Sequential: critic → adjudicator → END ────────────────────────────────
+    # Sequential: critic → adjudicator → END
     builder.add_edge("critic_node", "adjudicator_node")
     builder.add_edge("adjudicator_node", END)
 
@@ -160,6 +159,7 @@ def run_single_case(case: dict) -> dict:
         "ground_truth":  str(case.get("ground_truth", "")),
         "has_narrative": bool(case.get("has_narrative", False)),
         "full_dossier":  preprocessed_dossier,
+        "broad_group":   "",
         "agent1_output": {},
         "agent2_output": {},
         "agent3_output": {},
@@ -179,7 +179,9 @@ def run_single_case(case: dict) -> dict:
             final_state.update(output)
             
             # Print real-time updates
-            if "agent" in node_name:
+            if "stage1" in node_name:
+                print(f"  [STREAM] Triage Complete: Broad Group = {output.get('broad_group')}")
+            elif "agent" in node_name:
                 field = node_name.replace("_node", "_output")
                 diag = output.get(field, {}).get("diagnosis", "Unknown")
                 conf = output.get(field, {}).get("confidence", "N/A")

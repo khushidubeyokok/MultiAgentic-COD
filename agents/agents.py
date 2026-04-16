@@ -18,17 +18,23 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
 from agents.utils import parse_best_json, PHMRC_CATEGORIES, PHMRC_CATEGORY_GUIDE
+from agents.few_shot_examples import format_few_shot_block
+
+# ── Global Few-Shot Library ──────────────────────────────────────────────────
+# Initialized by run_pipeline.py on startup
+FEW_SHOT_LIBRARY = {}
 
 # ── Model config ──────────────────────────────────────────────────────────────
 # Change _MODEL here to switch for all three agents at once.
 # qwen2.5:7b  → ~4.5 GB RAM  (fits on most machines)
 # qwen2.5:14b → ~9 GB RAM    (needs a machine with ≥10 GB VRAM free)
-_MODEL = "qwen2.5:7b"
+_MODEL = "deepseek-r1:8b"
 
 _LLM = ChatOllama(
     model=_MODEL,
     temperature=0,
     num_ctx=8192,
+    num_predict=4096,
 )
 
 PHMRC_LIST = ", ".join(PHMRC_CATEGORIES)
@@ -117,49 +123,65 @@ After the JSON, repeat the diagnosis inside tags: [FINAL_DIAGNOSIS] Category [/F
 """
 
 # ──────────────────────────────────────────────────────────────────────────────
-# AGENT 2 — THE ELIMINATOR 
-# Protocol: top-down elimination from all 21 categories
+# AGENT 2 — THE SYMPTOM SCORER 
+# Protocol: binary checklist scoring across all 21 categories
 # ──────────────────────────────────────────────────────────────────────────────
 
 _AGENT2_SYSTEM = (
-    "You are The Eliminator for a pediatric cause of death determination pipeline. "
-    "You reason top-down by systematic exclusion. "
-    "Your starting position is: any of the 21 PHMRC categories could be the answer — "
-    "your job is to aggressively rule out what is NOT supported and converge on what remains."
+    "You are a structured clinical checklist evaluator. You do not guess diagnoses. "
+    "You answer binary questions about what is and is not present in a dossier, "
+    "then score categories mechanically."
 )
 
-_AGENT2_PROTOCOL = f"""⚠️ IMPORTANT BIAS WARNING: Pneumonia is one of 21 possible categories and should only
-be chosen if respiratory symptoms are CLEARLY PRIMARY and ACUTE (sudden onset, hours to days).
-Do NOT default to Pneumonia simply because a cough or breathing difficulty is mentioned
-alongside another primary illness. If the child has been sick for weeks, or has chronic
-markers (wasting, thrush, recurrent illness), consider other categories first.
+_AGENT2_PROTOCOL = f"""### REASONING PROTOCOL ###
+1. Read the dossier carefully.
+2. Go through the following fixed checklist. Answer Y or N for EVERY item based ONLY on explicit documentation in the dossier.
+3. For each category, tally its score (1 point per 'Y').
+4. The category with the highest score is your primary diagnosis.
 
-### REASONING PROTOCOL ###
-Follow these steps in order. Do not skip any.
+### THE CHECKLIST ###
+- Respiratory (→ Pneumonia): acute cough present? fast/difficult breathing primary complaint? chest indrawing? fever present? sudden onset (hours to days)?
+- Fever-Africa (→ Malaria): spiking or cyclical fever? patient in sub-Saharan Africa or endemic region? anaemia or splenomegaly? no clear bacterial source?
+- Meningeal (→ Meningitis): stiff neck EXPLICITLY documented? bulging fontanelle? photophobia? Kernig/Brudzinski signs?
+- CNS-no-neck (→ Encephalitis): seizures present? altered consciousness? fever? stiff neck ABSENT?
+- Multi-organ fever (→ Sepsis): rapid multi-organ deterioration? fever without single focal site? Africa ruled out? Pneumonia/Meningitis ruled out?
+- GI-primary (→ Diarrhea/Dysentery): watery or bloody stools as PRIMARY complaint? severe dehydration? sunken eyes?
+- Rash (→ Measles): maculopapular rash explicitly documented? face-to-body spread? fever + cough + conjunctivitis?
+- AIDS-markers (→ AIDS): oral thrush? mother HIV+? recurrent infections? chronic diarrhea >1 month? wasting over months?
+- Multi-bleed (→ Hemorrhagic fever): spontaneous bleeding from 2+ sites? fever present simultaneously?
+- Submersion (→ Drowning): found in/near water? submersion reported? water in airways?
+- Vehicle (→ Road Traffic): vehicle collision mentioned? road accident? blunt trauma from impact?
+- Height (→ Falls): fall from height reported? child found injured after fall?
+- Burn (→ Fires): burn injuries? fire/flame exposure? smoke inhalation?
+- Force (→ Violent Death): injuries inconsistent with history? assault documented? abuse signs?
+- Toxic (→ Poisonings): toxic substance ingestion? vomiting after exposure? no other explanation?
+- Envenomation (→ Bite of Venomous Animal): snake or scorpion bite reported? local swelling/necrosis? systemic toxicity?
+- Cardiac (→ Other Cardiovascular): murmur? cyanosis? oedema as primary? arrhythmia? no infection primary?
+- Mass (→ Other Cancers): chronic illness weeks to months? palpable mass? unexplained weight loss? no fever pattern?
+- Abdominal-no-diarrhea (→ Other Digestive): abdominal pain/jaundice WITHOUT diarrhea as primary? vomiting only? colicky pain in infant?
+- Pathogen-no-fit (→ Other Infectious Diseases): confirmed infection (typhoid/TB/pertussis) not fitting above categories?
+- Neonatal/Congenital (→ Other Defined Causes): prematurity? birth asphyxia? congenital anomaly? neonatal period?
 
-STEP 1 — MASS ELIMINATION:
-From the full list of 21 PHMRC categories, immediately eliminate every category that requires evidence that is COMPLETELY ABSENT from the dossier. List each eliminated category and the single key piece of missing evidence that disqualifies it. Aim to eliminate at least 15.
-
-⚠️ STRICT RULE: You may ONLY cite evidence that is EXPLICITLY STATED in the dossier. Do NOT infer, assume, or paraphrase symptoms that are not written there. If the dossier says "No cough reported" — cough is absent. Do not list it as present or potential evidence.
-
-The 21 categories are: {PHMRC_LIST}
-
-STEP 2 — SHORTLIST ANALYSIS:
-From the 3–5 remaining categories, identify the best fit based on the most severe, definitive, or unambiguous clinical finding in the dossier.
-
-STEP 3 — PIVOT TEST:
-State what single piece of evidence, if present, would have changed your answer to a different category.
-
-STEP 4 — JSON OUTPUT:
-Before writing your JSON, revisit the confusion guard below.
+### JSON OUTPUT SCHEMA ###
+Output a single JSON object (no markdown, no preamble):
+{{
+  "agent_name": "agent2_symptom_scorer",
+  "diagnosis": "<top scored category name>",
+  "confidence": "High/Medium/Low",
+  "primary_reasoning": "<one sentence summary of the scoring>",
+  "scores": {{
+    "Pneumonia": <int>, "Malaria": <int>, "Meningitis": <int>, "Encephalitis": <int>, "Sepsis": <int>,
+    "Diarrhea/Dysentery": <int>, "Measles": <int>, "AIDS": <int>, "Hemorrhagic fever": <int>,
+    "Drowning": <int>, "Road Traffic": <int>, "Falls": <int>, "Fires": <int>, "Violent Death": <int>,
+    "Poisonings": <int>, "Bite of Venomous Animal": <int>, "Other Cardiovascular Diseases": <int>,
+    "Other Cancers": <int>, "Other Digestive Diseases": <int>, "Other Infectious Diseases": <int>,
+    "Other Defined Causes of Child Deaths": <int>
+  }},
+  "top3": ["Cat1", "Cat2", "Cat3"],
+  "checklist_notes": "<key positive findings that drove the top score>"
+}}
 """
 _AGENT2_PROTOCOL += _CONFUSION_GUARD
-_AGENT2_PROTOCOL += """
-Output a single JSON object in this exact schema — nothing before or after it:
-{{"diagnosis": "exact category name", "confidence": "High/Medium/Low", "primary_reasoning": "concise description of what survived elimination and why", "eliminated_count": <number>, "pivot_evidence": "what would have changed the answer"}}
-
-After the JSON, repeat the diagnosis inside tags: [FINAL_DIAGNOSIS] Category [/FINAL_DIAGNOSIS]
-"""
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AGENT 3 — THE TIMELINE ANALYST 
@@ -211,12 +233,46 @@ Output a single JSON object in this exact schema — nothing before or after it:
 After the JSON, repeat the diagnosis inside tags: [FINAL_DIAGNOSIS] Category [/FINAL_DIAGNOSIS]
 """
 
+# ── Category Groups ───────────────────────────────────────────────────────────
+_GROUPS = {
+    "External/Trauma": [
+        "Drowning", "Falls", "Fires", "Road Traffic", "Violent Death", 
+        "Poisonings", "Bite of Venomous Animal"
+    ],
+    "Infectious/Disease": [
+        "Pneumonia", "Malaria", "Meningitis", "Encephalitis", "Sepsis", 
+        "Measles", "AIDS", "Other Infectious Diseases", "Hemorrhagic fever", 
+        "Diarrhea/Dysentery"
+    ],
+    "Chronic/Systemic/Other": [
+        "Other Cancers", "Other Defined Causes of Child Deaths",
+        "Other Digestive Diseases", "Other Cardiovascular Diseases"
+    ]
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Internal LLM caller
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: str) -> dict:
+def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: str, broad_group: str = "") -> dict:
+    triage_context = ""
+    target_cats = PHMRC_CATEGORIES
+    if broad_group in _GROUPS:
+        target_cats = _GROUPS[broad_group]
+        cats_str = ", ".join(target_cats)
+        triage_context = (
+            f"⚠️ TRIAGE CONTEXT: This case has been pre-classified as: {broad_group}\n"
+            f"Your candidate categories are therefore LIMITED TO: {cats_str}\n\n"
+            f"DO NOT diagnose a category outside this group unless the evidence is overwhelming and unambiguous. "
+            f"If you genuinely believe the triage is wrong, still output from the listed categories "
+            f"and note your concern in primary_reasoning.\n\n"
+        )
+
+    few_shot_block = format_few_shot_block(FEW_SHOT_LIBRARY, categories=target_cats)
+
     full_prompt = (
+        f"{few_shot_block}\n"
+        f"{triage_context}"
         f"{protocol_prompt}"
         f"{_CATEGORY_HEADER}"
         f"\n### PATIENT DOSSIER ###\n{dossier}"
@@ -254,6 +310,7 @@ def agent1_node(state: VAState) -> dict:
         "agent1_evidence_collector",
         _AGENT1_SYSTEM,
         _AGENT1_PROTOCOL,
+        state.get("broad_group", "")
     )
     return {"agent1_output": result}
 
@@ -261,9 +318,10 @@ def agent1_node(state: VAState) -> dict:
 def agent2_node(state: VAState) -> dict:
     result = _call_llm(
         state["full_dossier"],
-        "agent2_eliminator",
+        "agent2_symptom_scorer",
         _AGENT2_SYSTEM,
         _AGENT2_PROTOCOL,
+        state.get("broad_group", "")
     )
     return {"agent2_output": result}
 
@@ -274,5 +332,6 @@ def agent3_node(state: VAState) -> dict:
         "agent3_timeline_analyst",
         _AGENT3_SYSTEM,
         _AGENT3_PROTOCOL,
+        state.get("broad_group", "")
     )
     return {"agent3_output": result}

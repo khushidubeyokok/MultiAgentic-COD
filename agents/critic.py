@@ -19,9 +19,10 @@ from agents.state import VAState
 from agents.utils import strip_thoughts, parse_best_json
 
 _LLM = ChatOllama(
-    model="qwen2.5:7b",
+    model="deepseek-r1:8b",
     temperature=0,
     num_ctx=8192,
+    num_predict=2048,
 )
 
 _CRITIC_SYSTEM = (

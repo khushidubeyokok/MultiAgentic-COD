@@ -17,7 +17,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 80      # used only when MODE == "demo"
+SAMPLE_SIZE         = 25      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None    # set to None for a different sample each time
 
@@ -38,7 +38,7 @@ _AGENT_LOG   = _RESULTS / "agent_outputs.jsonl"   # full per-agent detail log
 
 # ── CSV column order ──────────────────────────────────────────────────────────
 _CSV_COLUMNS = [
-    "case_id", "ground_truth", "has_narrative",
+    "case_id", "broad_group", "ground_truth", "has_narrative",
     "agent1_diagnosis", "agent1_confidence", "agent1_reasoning",
     "agent2_diagnosis", "agent2_confidence", "agent2_reasoning",
     "agent3_diagnosis", "agent3_confidence", "agent3_reasoning",
@@ -69,6 +69,7 @@ def _is_correct(predicted: str, ground_truth: str) -> int:
 
 def _print_case_result(state: dict) -> None:
     case_id      = state.get("case_id", "?")
+    broad_group  = state.get("broad_group", "Unknown")
     ground_truth = state.get("ground_truth", "?")
     a1_diag = _agent_diag(state.get("agent1_output", {}))
     a1_conf = _agent_conf(state.get("agent1_output", {}))
@@ -82,7 +83,7 @@ def _print_case_result(state: dict) -> None:
     match_str = "YES ✓" if _is_correct(mapped_cat, ground_truth) else "NO ✗"
 
     print("=" * 60)
-    print(f"Case ID: {case_id}  |  Ground Truth: {ground_truth}")
+    print(f"Case ID: {case_id}  |  Triage: {broad_group}  |  Ground Truth: {ground_truth}")
     print("-" * 60)
     print(f"Agent 1 (Infectious Disease): {a1_diag} [{a1_conf}]")
     print(f"Agent 2 (Intensivist):        {a2_diag} [{a2_conf}]")
@@ -106,6 +107,7 @@ def _build_csv_row(state: dict) -> dict:
 
     return {
         "case_id":           state.get("case_id", ""),
+        "broad_group":       state.get("broad_group", ""),
         "ground_truth":      ground_truth,
         "has_narrative":     int(bool(state.get("has_narrative", False))),
         "agent1_diagnosis":  _agent_diag(a1),
@@ -167,12 +169,12 @@ def _write_agent_log(state: dict, path: Path) -> None:
             "rejection_reason":     a1.get("rejection_reason", ""),
         },
         "agent2": {
-            "name":      a2.get("agent_name", "agent2_eliminator"),
+            "name":      a2.get("agent_name", "agent2_symptom_scorer"),
             "diagnosis": a2.get("diagnosis", "Unknown"),
             "confidence":a2.get("confidence", "N/A"),
             "reasoning": a2.get("primary_reasoning", ""),
-            "eliminated_count": a2.get("eliminated_count", ""),
-            "pivot_evidence":   a2.get("pivot_evidence", ""),
+            "scores":    a2.get("scores", {}),
+            "top3":      a2.get("top3", []),
         },
         "agent3": {
             "name":      a3.get("agent_name", "agent3_timeline_analyst"),
@@ -221,7 +223,23 @@ def _compute_and_print_metrics(rows: list, output_path: Path) -> None:
 def main() -> None:
     from agents.data_loader import load_dossiers
     from agents.graph import run_single_case
-    cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED)
+    from agents.few_shot_examples import select_exemplars
+    import agents.agents as agents_lib
+    import agents.stage1 as stage1_lib
+
+    # 1. Load full dataset once to pick 1 exemplar per category
+    print("[INFO] Initializing few-shot library from full dataset...")
+    full_cases = load_dossiers(str(_DATA), mode="full")
+    few_shot_lib = select_exemplars(full_cases, seed=RANDOM_SEED or 42)
+    exclude_ids = {item["case_id"] for item in few_shot_lib.values()}
+    
+    # 2. Inject into global namespaces (used by nodes)
+    agents_lib.FEW_SHOT_LIBRARY = few_shot_lib
+    stage1_lib.FEW_SHOT_LIBRARY = few_shot_lib
+    print(f"[INFO] Few-shot library initialized with {len(few_shot_lib)} categories.")
+
+    # 3. Load evaluation cases (demo or full), excluding exemplars
+    cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED, exclude_ids=exclude_ids)
 
     # ── Filter to pinned cases if specified ───────────────────────────────────
     if PINNED_CASE_IDS:
@@ -258,7 +276,10 @@ def main() -> None:
             first_write = False
             csv_buffer = []
         except Exception as exc:
-            _log_failed(case_id, str(exc), _FAILED)
+            import traceback
+            tb = traceback.format_exc()
+            _log_failed(case_id, f"{exc}\n{tb}", _FAILED)
+            print(f"[ERROR] Case {case_id} failed: {exc}")
             continue
 
         if idx % 5 == 0 or idx == total_cases:

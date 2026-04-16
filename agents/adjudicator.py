@@ -24,9 +24,10 @@ from agents.state import VAState
 from agents.utils import parse_best_json, strip_thoughts, PHMRC_CATEGORIES, fuzzy_match_category
 
 _LLM = ChatOllama(
-    model="qwen2.5:7b",
+    model="deepseek-r1:8b",
     temperature=0.0,
     num_ctx=8192,
+    num_predict=2048,
 )
 
 PHMRC_LIST = ", ".join(PHMRC_CATEGORIES)
@@ -132,8 +133,8 @@ def adjudicator_node(state: VAState) -> dict:
         HumanMessage(content=prompt),
     ])
     raw_text = response.content if hasattr(response, "content") else str(response)
-
-    result = parse_best_json(raw_text)
+    cleaned = strip_thoughts(raw_text)
+    result = parse_best_json(cleaned)
 
     # ── RESOLVE mapped_category with fuzzy matching ──────────────────────────
     raw_cat = result.get("mapped_category", result.get("diagnosis", ""))
