@@ -180,6 +180,8 @@ Output a single JSON object (no markdown, no preamble):
   "top3": ["Cat1", "Cat2", "Cat3"],
   "checklist_notes": "<key positive findings that drove the top score>"
 }}
+
+After the JSON, repeat the final category exactly like this: [FINAL_DIAGNOSIS] Category Name [/FINAL_DIAGNOSIS]
 """
 _AGENT2_PROTOCOL += _CONFUSION_GUARD
 

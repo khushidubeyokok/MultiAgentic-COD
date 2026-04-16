@@ -16,7 +16,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
+MODE                = "full"  # "demo" for stratified sample | "full" for all cases
 SAMPLE_SIZE         = 25      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None    # set to None for a different sample each time
@@ -207,12 +207,12 @@ def _compute_and_print_metrics(rows: list, output_path: Path) -> None:
     _out("=" * 60)
     _out("  EVALUATION METRICS")
     _out("=" * 60)
-    correct_total = sum(int(r["is_correct"]) for r in rows)
+    correct_total = sum(int(r.get("is_correct", 0)) for r in rows)
     _out(f"\na. Overall Top-1 Accuracy: {correct_total}/{total} = {correct_total/total:.1%}")
     
-    a1_c = sum(int(r["agent1_correct"]) for r in rows)
-    a2_c = sum(int(r["agent2_correct"]) for r in rows)
-    a3_c = sum(int(r["agent3_correct"]) for r in rows)
+    a1_c = sum(int(r.get("agent1_correct", 0)) for r in rows)
+    a2_c = sum(int(r.get("agent2_correct", 0)) for r in rows)
+    a3_c = sum(int(r.get("agent3_correct", 0)) for r in rows)
     _out(f"\nb. Per-Agent Accuracy:")
     _out(f"   Agent 1: {a1_c/total:.1%} | Agent 2: {a2_c/total:.1%} | Agent 3: {a3_c/total:.1%}")
 
@@ -276,9 +276,7 @@ def main() -> None:
             first_write = False
             csv_buffer = []
         except Exception as exc:
-            import traceback
-            tb = traceback.format_exc()
-            _log_failed(case_id, f"{exc}\n{tb}", _FAILED)
+            _log_failed(case_id, str(exc), _FAILED)
             print(f"[ERROR] Case {case_id} failed: {exc}")
             continue
 

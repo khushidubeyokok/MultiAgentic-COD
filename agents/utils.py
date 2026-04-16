@@ -340,24 +340,40 @@ def parse_best_json(raw: str) -> dict:
     # 1. Try to extract from tags first for better accuracy
     tags = _keyword_fallback(text)
     
-    # 2. Try JSON extraction
-    match = re.search(r"(\{.*\})", text, re.DOTALL)
-    if match:
-        candidate = _fix_dirty_json(match.group(1))
+    # 2. Try JSON extraction — find all {...} blocks and try them
+    # Use re.finditer to get all potential JSON blocks
+    # We use a non-greedy search first for individual objects
+    candidates = re.findall(r"(\{.*?\})", text, re.DOTALL)
+    
+    # Also try the widest possible match just in case it's a nested structure
+    wide_match = re.search(r"(\{.*\})", text, re.DOTALL)
+    if wide_match:
+        candidates.append(wide_match.group(1))
+
+    for cand in candidates:
+        candidate = _fix_dirty_json(cand)
         try:
             parsed = json.loads(candidate)
-            # If tags were found and they disagree with JSON, 
-            # tags might be safer if JSON was malformed elsewhere
-            if tags and "diagnosis" not in parsed:
-                parsed["diagnosis"] = tags["diagnosis"]
+            if not isinstance(parsed, dict):
+                continue
             # Apply fuzzy matching to whatever diagnosis was parsed
             if "diagnosis" in parsed and parsed["diagnosis"]:
                 resolved = fuzzy_match_category(str(parsed["diagnosis"]))
                 if resolved:
                     parsed["diagnosis"] = resolved
+            
+            # If we lack a diagnosis but tags found one, fill it in
+            if tags and ("diagnosis" not in parsed or not parsed["diagnosis"]):
+                parsed["diagnosis"] = tags["diagnosis"]
+            
+            # Add raw_response for debugging on every parse result
+            parsed["raw_response"] = raw
             return parsed
         except:
-            pass
+            continue
 
     # 3. Return absolute fallback (tags or keyword)
-    return tags if tags else {}
+    if tags:
+        tags["raw_response"] = raw
+        return tags
+    return {"raw_response": raw}
