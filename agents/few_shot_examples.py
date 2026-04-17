@@ -31,22 +31,25 @@ def select_exemplars(all_cases: list, seed: int = 42) -> dict:
 def format_few_shot_block(library: dict, categories: list = None) -> str:
     """
     Formats selected exemplars into a single string block.
-    If categories is provided, only include those.
+    Caps dossiers at 400 chars and limits to 5 total exemplars.
+    Picked randomly from the provided categories or all categories.
     """
     if not library:
         return ""
     
-    targets = categories if categories else PHMRC_CATEGORIES
-    block = "### EXEMPLAR CASES FOR REFERENCE (EXHAUSTIVE) ###\n"
-    block += "Below are examples of dossiers and their correct ground-truth categories. Use these to calibrate your diagnostic criteria.\n\n"
+    available_cats = [c for c in (categories if categories else PHMRC_CATEGORIES) if c in library]
     
-    count = 0
-    for cat in targets:
-        if cat in library:
-            item = library[cat]
-            block += f"-- EXAMPLE {count+1} --\n"
-            block += f"DOSSIER: {item['dossier'][:1500]}...\n"
-            block += f"CORRECT CATEGORY: {cat}\n\n"
-            count += 1
+    # Pick up to 5 random categories from the available relevant ones
+    selected_cats = random.sample(available_cats, min(5, len(available_cats)))
+    
+    block = "### EXEMPLAR CASES FOR REFERENCE ###\n"
+    block += "Below are examples of dossiers and their correct ground-truth categories.\n\n"
+    
+    for i, cat in enumerate(selected_cats):
+        item = library[cat]
+        block += f"-- EXAMPLE {i+1} --\n"
+        # Cap at 400 characters
+        block += f"DOSSIER: {item['dossier'][:400]}...\n"
+        block += f"CORRECT CATEGORY: {cat}\n\n"
             
     return block

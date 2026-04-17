@@ -16,7 +16,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MODE                = "full"  # "demo" for stratified sample | "full" for all cases
+MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
 SAMPLE_SIZE         = 25      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None    # set to None for a different sample each time
@@ -25,7 +25,7 @@ RANDOM_SEED         = None    # set to None for a different sample each time
 # IDs are plain numbers matching the dataset (e.g. "1002", "42", "107").
 # Example: PINNED_CASE_IDS = ["42", "107", "1002"]
 # Leave as [] to use normal MODE / SAMPLE_SIZE sampling.
-PINNED_CASE_IDS: list = []
+PINNED_CASE_IDS: list = ["1403"]
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _ROOT     = Path(__file__).resolve().parent.parent

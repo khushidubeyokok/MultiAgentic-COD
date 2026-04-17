@@ -119,6 +119,26 @@ PREFERENCE RULE: Prefer diagnoses already proposed by the agents or critic if th
 After the JSON, repeat: [FINAL_DIAGNOSIS] Category [/FINAL_DIAGNOSIS]"""
 
 
+def consensus_node(state: VAState) -> dict:
+    """
+    Fast-path node for unanimous agent consensus.
+    Bypasses Critic and Adjudicator LLMs.
+    """
+    # All 3 agents agree, so we can pick any of them (they are all normalized)
+    a1 = state["agent1_output"]["diagnosis"]
+    m1 = fuzzy_match_category(str(a1))
+    
+    print(f"  [FAST PATH] Unanimous consensus detected: {m1}. Bypassing LLM adjudication.")
+    
+    return {
+        "final_diagnosis":  str(a1),
+        "mapped_category":  str(m1),
+        "confidence_score": 90,
+        "final_reasoning":  "Unanimous agent consensus",
+        "winning_agent":    "all",
+    }
+
+
 def adjudicator_node(state: VAState) -> dict:
     # ── PARSE CRITIC VERDICT ────────────────────────────────────────────────
     critique_str = state.get("critique", "")

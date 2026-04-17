@@ -282,12 +282,22 @@ def fuzzy_match_category(text: str) -> str | None:
 
 def strip_thoughts(text: str) -> str:
     """
-    Remove <thought>...</thought> blocks from the model output.
+    Remove <thought>...</thought> and <think>...</think> blocks from output.
+    Also handles partial/unclosed tags and strips remaining reasoning-like XML tags.
     """
     if not text:
         return ""
-    cleaned = re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    cleaned = re.sub(r"<thought>.*", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    
+    # 1. Handle both <thought> and <think> closed blocks
+    cleaned = re.sub(r"<(thought|think)>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # 2. Handle cases where a block is opened but never closed (partial output)
+    cleaned = re.sub(r"<(thought|think)>.*", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    
+    # 3. Strip any remaining XML-style tags that look like reasoning wrappers
+    # This also helps with things like <reasoning>, <analysis>, etc.
+    cleaned = re.sub(r"<[^>]+>", "", cleaned)
+    
     return cleaned.strip()
 
 def _fix_dirty_json(s: str) -> str:
@@ -330,25 +340,53 @@ def _keyword_fallback(text: str) -> dict:
         }
     return {}
 
+def check_consensus(state: dict) -> bool:
+    """
+    Check if all 3 agents reached the same diagnosis after normalization.
+    """
+    a1 = state.get("agent1_output", {}).get("diagnosis")
+    a2 = state.get("agent2_output", {}).get("diagnosis")
+    a3 = state.get("agent3_output", {}).get("diagnosis")
+    
+    if not a1 or not a2 or not a3:
+        return False
+        
+    m1 = fuzzy_match_category(str(a1))
+    m2 = fuzzy_match_category(str(a2))
+    m3 = fuzzy_match_category(str(a3))
+    
+    if not m1 or not m2 or not m3:
+        return False
+        
+    return m1 == m2 == m3
+
 def parse_best_json(raw: str) -> dict:
     """
     Grabs the best-looking JSON block from the text.
-    Prioritizes [FINAL_DIAGNOSIS] tags if present.
+    Sorts all candidate blocks by length descending and returns the first one 
+    that parses correctly and contains a "diagnosis" key.
     """
     text = strip_thoughts(raw)
     
-    # 1. Try to extract from tags first for better accuracy
-    tags = _keyword_fallback(text)
+    # 1. Try JSON extraction — find all {...} blocks
+    # We use a greedy regex for candidates and then find all spans
+    # We want to catch nested structures as single blocks if possible
+    candidates = []
     
-    # 2. Try JSON extraction — find all {...} blocks and try them
-    # Use re.finditer to get all potential JSON blocks
-    # We use a non-greedy search first for individual objects
-    candidates = re.findall(r"(\{.*?\})", text, re.DOTALL)
+    # Find all starting points of '{'
+    starts = [m.start() for m in re.finditer(r"\{", text)]
+    # Find all ending points of '}'
+    ends = [m.start() for m in re.finditer(r"\}", text)]
     
-    # Also try the widest possible match just in case it's a nested structure
-    wide_match = re.search(r"(\{.*\})", text, re.DOTALL)
-    if wide_match:
-        candidates.append(wide_match.group(1))
+    # Generate all possible balanced or unbalanced { } spans
+    # We'll rely on the parser to tell us if they are valid JSON
+    for s in starts:
+        for e in ends:
+            if e > s:
+                candidates.append(text[s:e+1])
+    
+    # Sort candidates by length descending (longest first)
+    candidates.sort(key=len, reverse=True)
 
     for cand in candidates:
         candidate = _fix_dirty_json(cand)
@@ -356,24 +394,34 @@ def parse_best_json(raw: str) -> dict:
             parsed = json.loads(candidate)
             if not isinstance(parsed, dict):
                 continue
-            # Apply fuzzy matching to whatever diagnosis was parsed
-            if "diagnosis" in parsed and parsed["diagnosis"]:
-                resolved = fuzzy_match_category(str(parsed["diagnosis"]))
-                if resolved:
-                    parsed["diagnosis"] = resolved
             
-            # If we lack a diagnosis but tags found one, fill it in
-            if tags and ("diagnosis" not in parsed or not parsed["diagnosis"]):
-                parsed["diagnosis"] = tags["diagnosis"]
-            
-            # Add raw_response for debugging on every parse result
-            parsed["raw_response"] = raw
-            return parsed
+            # List of keys that indicate a valid diagnostic JSON
+            valid_keys = ["diagnosis", "broad_group", "final_diagnosis", "mapped_category", "recommended_diagnosis", "consensus_diagnosis"]
+            found_key = next((k for k in valid_keys if k in parsed and parsed[k]), None)
+
+            if found_key:
+                # Apply fuzzy matching to the primary diagnosis field found
+                target_val = str(parsed[found_key])
+                # We normalize the most important ones
+                if found_key in ["diagnosis", "final_diagnosis", "mapped_category", "recommended_diagnosis", "consensus_diagnosis"]:
+                    resolved = fuzzy_match_category(target_val)
+                    if resolved:
+                        # Update the key we found (or 'diagnosis' if it's a specialist)
+                        parsed[found_key] = resolved
+                        # Ensure 'diagnosis' key exists as a common interface for specialist nodes
+                        if "diagnosis" not in parsed:
+                            parsed["diagnosis"] = resolved
+                
+                # Add raw_response for debugging
+                parsed["raw_response"] = raw
+                return parsed
         except:
             continue
 
-    # 3. Return absolute fallback (tags or keyword)
+    # 2. Final Fallback: Try keyword extraction if JSON fails/is missing diagnosis
+    tags = _keyword_fallback(text)
     if tags:
         tags["raw_response"] = raw
         return tags
+        
     return {"raw_response": raw}

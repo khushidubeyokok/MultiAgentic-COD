@@ -35,6 +35,7 @@ _LLM = ChatOllama(
     temperature=0,
     num_ctx=8192,
     num_predict=4096,
+    timeout=180,  # 3 minute timeout for complex reasoning
 )
 
 PHMRC_LIST = ", ".join(PHMRC_CATEGORIES)
@@ -127,6 +128,14 @@ After the JSON, repeat the diagnosis inside tags: [FINAL_DIAGNOSIS] Category [/F
 # Protocol: binary checklist scoring across all 21 categories
 # ──────────────────────────────────────────────────────────────────────────────
 
+_AGENT2_LLM = ChatOllama(
+    model="qwen2.5:7b",
+    temperature=0,
+    num_ctx=8192,
+    num_predict=4096,
+    timeout=180,
+)
+
 _AGENT2_SYSTEM = (
     "You are a structured clinical checklist evaluator. You do not guess diagnoses. "
     "You answer binary questions about what is and is not present in a dossier, "
@@ -162,6 +171,8 @@ _AGENT2_PROTOCOL = f"""### REASONING PROTOCOL ###
 - Pathogen-no-fit (→ Other Infectious Diseases): confirmed infection (typhoid/TB/pertussis) not fitting above categories?
 - Neonatal/Congenital (→ Other Defined Causes): prematurity? birth asphyxia? congenital anomaly? neonatal period?
 
+{_CONFUSION_GUARD}
+
 ### JSON OUTPUT SCHEMA ###
 Output a single JSON object (no markdown, no preamble):
 {{
@@ -183,7 +194,6 @@ Output a single JSON object (no markdown, no preamble):
 
 After the JSON, repeat the final category exactly like this: [FINAL_DIAGNOSIS] Category Name [/FINAL_DIAGNOSIS]
 """
-_AGENT2_PROTOCOL += _CONFUSION_GUARD
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AGENT 3 — THE TIMELINE ANALYST 
@@ -256,7 +266,9 @@ _GROUPS = {
 # Internal LLM caller
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: str, broad_group: str = "") -> dict:
+def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: str, broad_group: str = "", llm = None) -> dict:
+    # Use global _LLM if no specific model provided
+    model = llm if llm else _LLM
     triage_context = ""
     target_cats = PHMRC_CATEGORIES
     if broad_group in _GROUPS:
@@ -280,20 +292,22 @@ def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: st
         f"\n### PATIENT DOSSIER ###\n{dossier}"
     )
 
-    response = _LLM.invoke([
+    response = model.invoke([
         SystemMessage(content=system_msg),
         HumanMessage(content=full_prompt),
     ])
     raw_text = response.content if hasattr(response, "content") else str(response)
 
     parsed = parse_best_json(raw_text)
-    if not parsed:
-        print(f"[WARN] {agent_key}: JSON parse failed. Returning error dict.")
+    
+    # Validation: the JSON must at least contain a "diagnosis" key or broad_group to be considered a success
+    if not parsed or ("diagnosis" not in parsed and "broad_group" not in parsed) or parsed.get("diagnosis") == "Unknown":
+        print(f"[WARN] {agent_key}: Valid diagnosis not found in JSON. Returning error dict.")
         return {
             "agent_name": agent_key,
             "diagnosis": "Unknown",
             "confidence": "Low",
-            "primary_reasoning": "Reasoning model output parse failed.",
+            "primary_reasoning": "Reasoning model failed to output a valid diagnosis key.",
             "error": True,
             "raw_response": raw_text,
         }
@@ -323,7 +337,8 @@ def agent2_node(state: VAState) -> dict:
         "agent2_symptom_scorer",
         _AGENT2_SYSTEM,
         _AGENT2_PROTOCOL,
-        state.get("broad_group", "")
+        state.get("broad_group", ""),
+        llm=_AGENT2_LLM
     )
     return {"agent2_output": result}
 
