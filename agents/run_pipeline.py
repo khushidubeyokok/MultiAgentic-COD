@@ -17,15 +17,12 @@ if str(_REPO_ROOT) not in sys.path:
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 25      # used only when MODE == "demo"
+SAMPLE_SIZE         = 10      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
-RANDOM_SEED         = None    # set to None for a different sample each time
+RANDOM_SEED         = None      # fixed seed for reproducibility
 
 # ── Pinned cases (set to a list of case_id strings to run ONLY those cases) ───
-# IDs are plain numbers matching the dataset (e.g. "1002", "42", "107").
-# Example: PINNED_CASE_IDS = ["42", "107", "1002"]
-# Leave as [] to use normal MODE / SAMPLE_SIZE sampling.
-PINNED_CASE_IDS: list = ["1403"]
+PINNED_CASE_IDS: list = []
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _ROOT     = Path(__file__).resolve().parent.parent
@@ -34,7 +31,7 @@ _RESULTS     = _ROOT / "results"
 _PRED_CSV    = _RESULTS / "predictions.csv"
 _METRICS     = _RESULTS / "metrics_summary.txt"
 _FAILED      = _RESULTS / "failed_cases.txt"
-_AGENT_LOG   = _RESULTS / "agent_outputs.jsonl"   # full per-agent detail log
+_AGENT_LOG   = _RESULTS / "agent_outputs.jsonl"
 
 # ── CSV column order ──────────────────────────────────────────────────────────
 _CSV_COLUMNS = [
@@ -42,13 +39,10 @@ _CSV_COLUMNS = [
     "agent1_diagnosis", "agent1_confidence", "agent1_reasoning",
     "agent2_diagnosis", "agent2_confidence", "agent2_reasoning",
     "agent3_diagnosis", "agent3_confidence", "agent3_reasoning",
-    "critic_critique",
     "final_diagnosis", "mapped_category", "confidence_score", "final_reasoning",
     "winning_agent",
     "is_correct", "agent1_correct", "agent2_correct", "agent3_correct",
 ]
-
-from agents.utils import PHMRC_CATEGORIES
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -77,7 +71,6 @@ def _print_case_result(state: dict) -> None:
     a2_conf = _agent_conf(state.get("agent2_output", {}))
     a3_diag = _agent_diag(state.get("agent3_output", {}))
     a3_conf = _agent_conf(state.get("agent3_output", {}))
-    critique = state.get("critique", "")
     mapped_cat = state.get("mapped_category", "Unknown")
     conf_score = state.get("confidence_score", 0)
     match_str = "YES ✓" if _is_correct(mapped_cat, ground_truth) else "NO ✗"
@@ -85,12 +78,9 @@ def _print_case_result(state: dict) -> None:
     print("=" * 60)
     print(f"Case ID: {case_id}  |  Triage: {broad_group}  |  Ground Truth: {ground_truth}")
     print("-" * 60)
-    print(f"Agent 1 (Infectious Disease): {a1_diag} [{a1_conf}]")
-    print(f"Agent 2 (Intensivist):        {a2_diag} [{a2_conf}]")
-    print(f"Agent 3 (Trauma/Nutrition):   {a3_diag} [{a3_conf}]")
-    print("-" * 60)
-    critique_preview = (critique[:200] + "...") if len(critique) > 200 else critique
-    print(f"CRITIQUE SUMMARY (first 200 chars): {critique_preview}")
+    print(f"Agent 1 (Evidence Collector): {a1_diag} [{a1_conf}]")
+    print(f"Agent 2 (Symptom Scorer):     {a2_diag} [{a2_conf}]")
+    print(f"Agent 3 (Timeline Analyst):   {a3_diag} [{a3_conf}]")
     print("-" * 60)
     print(f"FINAL VERDICT: {mapped_cat} (confidence: {conf_score}/100)")
     print(f"REASONING: {state.get('final_reasoning', 'N/A')}")
@@ -119,7 +109,6 @@ def _build_csv_row(state: dict) -> dict:
         "agent3_diagnosis":  _agent_diag(a3),
         "agent3_confidence": _agent_conf(a3),
         "agent3_reasoning":  _agent_reason(a3),
-        "critic_critique":   state.get("critique", ""),
         "final_diagnosis":   state.get("final_diagnosis", ""),
         "mapped_category":   mapped_cat,
         "confidence_score":  state.get("confidence_score", 0),
@@ -145,23 +134,15 @@ def _log_failed(case_id: str, reason: str, path: Path) -> None:
         fh.write(f"case_id={case_id} | reason={reason}\n")
 
 def _write_agent_log(state: dict, path: Path) -> None:
-    """Append a full per-agent JSON record to the agent_outputs.jsonl file."""
     import json as _json
     a1 = state.get("agent1_output", {})
     a2 = state.get("agent2_output", {})
     a3 = state.get("agent3_output", {})
-    critique_raw = state.get("critique", "")
-    # Try to pretty-print the critic JSON verdict if it is parseable
-    try:
-        critique_parsed = _json.loads(critique_raw)
-    except Exception:
-        critique_parsed = critique_raw
 
     record = {
         "case_id":       state.get("case_id", ""),
         "ground_truth":  state.get("ground_truth", ""),
         "agent1": {
-            "name":      a1.get("agent_name", "agent1_evidence_collector"),
             "diagnosis": a1.get("diagnosis", "Unknown"),
             "confidence":a1.get("confidence", "N/A"),
             "reasoning": a1.get("primary_reasoning", ""),
@@ -169,29 +150,24 @@ def _write_agent_log(state: dict, path: Path) -> None:
             "rejection_reason":     a1.get("rejection_reason", ""),
         },
         "agent2": {
-            "name":      a2.get("agent_name", "agent2_symptom_scorer"),
             "diagnosis": a2.get("diagnosis", "Unknown"),
             "confidence":a2.get("confidence", "N/A"),
             "reasoning": a2.get("primary_reasoning", ""),
-            "scores":    a2.get("scores", {}),
             "top3":      a2.get("top3", []),
         },
         "agent3": {
-            "name":      a3.get("agent_name", "agent3_timeline_analyst"),
             "diagnosis": a3.get("diagnosis", "Unknown"),
             "confidence":a3.get("confidence", "N/A"),
             "reasoning": a3.get("primary_reasoning", ""),
-            "timeline_duration":   a3.get("timeline_duration", ""),
-            "nutritional_modifier": a3.get("nutritional_modifier", ""),
+            "timeline_duration": a3.get("timeline_duration", ""),
         },
-        "critic_verdict": critique_parsed,
         "final": {
             "mapped_category": state.get("mapped_category", ""),
             "confidence_score": state.get("confidence_score", 0),
             "final_reasoning":  state.get("final_reasoning", ""),
             "winning_agent":    state.get("winning_agent", ""),
         },
-        "is_correct": 1 if str(state.get("mapped_category","")).strip().lower() == str(state.get("ground_truth","")).strip().lower() else 0,
+        "is_correct": _is_correct(state.get("mapped_category",""), state.get("ground_truth","")),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as fh:
@@ -223,33 +199,17 @@ def _compute_and_print_metrics(rows: list, output_path: Path) -> None:
 def main() -> None:
     from agents.data_loader import load_dossiers
     from agents.graph import run_single_case
-    from agents.few_shot_examples import select_exemplars
-    import agents.agents as agents_lib
-    import agents.stage1 as stage1_lib
 
-    # 1. Load full dataset once to pick 1 exemplar per category
-    print("[INFO] Initializing few-shot library from full dataset...")
-    full_cases = load_dossiers(str(_DATA), mode="full")
-    few_shot_lib = select_exemplars(full_cases, seed=RANDOM_SEED or 42)
-    exclude_ids = {item["case_id"] for item in few_shot_lib.values()}
-    
-    # 2. Inject into global namespaces (used by nodes)
-    agents_lib.FEW_SHOT_LIBRARY = few_shot_lib
-    stage1_lib.FEW_SHOT_LIBRARY = few_shot_lib
-    print(f"[INFO] Few-shot library initialized with {len(few_shot_lib)} categories.")
+    # Load assessment cases
+    cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED)
 
-    # 3. Load evaluation cases (demo or full), excluding exemplars
-    cases = load_dossiers(str(_DATA), mode=MODE, sample_size=SAMPLE_SIZE, seed=RANDOM_SEED, exclude_ids=exclude_ids)
-
-    # ── Filter to pinned cases if specified ───────────────────────────────────
+    # Filter to pinned cases if specified
     if PINNED_CASE_IDS:
         pinned_set = {str(c).strip() for c in PINNED_CASE_IDS}
         cases = [c for c in cases if str(c.get("case_id", "")).strip() in pinned_set]
-        # If pinned IDs aren't in the demo sample, pull from full dataset
         if not cases:
             all_cases = load_dossiers(str(_DATA), mode="full", sample_size=0, seed=RANDOM_SEED)
             cases = [c for c in all_cases if str(c.get("case_id", "")).strip() in pinned_set]
-        print(f"[PINNED] Running {len(cases)} pinned case(s): {PINNED_CASE_IDS}")
 
     total_cases = len(cases)
     _RESULTS.mkdir(parents=True, exist_ok=True)
@@ -272,7 +232,7 @@ def main() -> None:
             correct_count += int(row["is_correct"])
             csv_buffer.append(row)
             _append_to_csv(csv_buffer, _PRED_CSV, write_header=first_write)
-            _write_agent_log(final_state, _AGENT_LOG)   # ← full per-agent detail
+            _write_agent_log(final_state, _AGENT_LOG)
             first_write = False
             csv_buffer = []
         except Exception as exc:

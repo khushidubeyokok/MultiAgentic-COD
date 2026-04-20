@@ -1,153 +1,81 @@
 """
 agents/adjudicator.py
 ---------------------
-Final adjudicator node. Uses the structured critic verdict to guide the LLM call.
-
-CONSENSUS POLICY (non-blind):
-  - Unanimous agent agreement OR critic "consensus" verdict is passed to the LLM
-    as a STRONG PRIOR HINT — the adjudicator still performs independent reasoning
-    and must explicitly confirm or override.
-  - The blind "all-3-agree → instant return" fast-path has been removed.
-    Critic and adjudicator always run their full reasoning step.
-
-SPLIT POLICY:
-  - Critic's strongest_agent + recommended_diagnosis is passed as a hint.
-  - Adjudicator must pick from proposals already made by agents/critic.
+Final adjudicator node. Weighs specialist agent inputs and renders a final verdict.
 """
 
-import json
-
-from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
-from agents.utils import parse_best_json, strip_thoughts, PHMRC_CATEGORIES, fuzzy_match_category
+from agents.utils import parse_best_json, strip_thoughts, fuzzy_match_category, GEMMA4_THINKING_PREFIX
+from agents.model_config import make_llm, ACTIVE_PROFILE
+from agents.disease_ref import get_full_disease_ref
 
-_LLM = ChatOllama(
-    model="deepseek-r1:8b",
-    temperature=0.0,
-    num_ctx=8192,
-    num_predict=2048,
-)
+_LLM = make_llm()
 
-PHMRC_LIST = ", ".join(PHMRC_CATEGORIES)
+_ADJUDICATOR_SYSTEM = GEMMA4_THINKING_PREFIX + "You are the final diagnostic arbitrator. Three specialist agents have each analysed a patient dossier and given you their diagnosis and reasoning. Your job is to weigh their input alongside the dossier and render one final verdict. Output only JSON."
 
-_ADJUDICATOR_SYSTEM = (
-    "You are the Final Adjudicator — the last decision-maker in a structured multi-agent "
-    "diagnostic panel. You have access to all specialist reasoning and a structured clinical "
-    "critique. Your job is to render a single, authoritative final diagnosis. "
-    "You must always reason from the evidence yourself — do NOT simply rubber-stamp what "
-    "the majority agreed on without confirming it is supported by the dossier."
-)
-
-
-def _parse_critique(critique_str: str) -> dict | None:
-    """
-    Try to parse the critic output as structured JSON.
-    Returns dict if successful and has a 'verdict' key, else None.
-    """
-    if not critique_str:
-        return None
-    try:
-        obj = json.loads(critique_str)
-        if isinstance(obj, dict) and "verdict" in obj:
-            return obj
-    except Exception:
-        pass
-    # Try via parse_best_json as a fallback
-    obj = parse_best_json(critique_str)
-    if obj and "verdict" in obj:
-        return obj
-    return None
-
-
-def _build_adjudication_prompt(state: VAState, critic_verdict: dict | None) -> str:
+def _build_adjudication_prompt(state: VAState) -> str:
     a1, a2, a3 = state["agent1_output"], state["agent2_output"], state["agent3_output"]
+    dossier = state["full_dossier"]
+    full_disease_ref = get_full_disease_ref()
 
     def _get(d: dict, k: str) -> str:
         return str(d.get(k, "Unknown"))
 
-    # ── Build consensus/split hint block ──────────────────────────────────────
-    critic_hint = ""
-    if critic_verdict:
-        verdict_type = critic_verdict.get("verdict", "")
-        recommended  = critic_verdict.get("recommended_diagnosis", "") or critic_verdict.get("consensus_diagnosis", "")
-        strongest    = critic_verdict.get("strongest_agent", "")
-        reason       = critic_verdict.get("reason", "")
+    return f"""Section 1 — The three agent inputs:
 
-        if verdict_type == "consensus":
-            critic_hint = (
-                f"\n### CRITIC CONSENSUS SIGNAL ###\n"
-                f"The Clinical Critic reports that ALL THREE agents independently reached '{recommended}'.\n"
-                f"Reason: {reason}\n"
-                f"⚠️  IMPORTANT: This is a strong prior, but you MUST independently verify:\n"
-                f"  (a) Does the dossier evidence actually support '{recommended}'?\n"
-                f"  (b) Are the agents' reasoning chains internally consistent with the dossier?\n"
-                f"  If both checks pass → confirm '{recommended}'. "
-                f"If you find a clear error → override with your own diagnosis and explain why.\n"
-            )
-        elif verdict_type == "split":
-            critic_hint = (
-                f"\n### CRITIC SPLIT RECOMMENDATION ###\n"
-                f"The Clinical Critic recommends '{recommended}' based on: {reason}\n"
-                f"(Strongest reasoning agent: {strongest})\n"
-                f"Evaluate whether you agree. Only override if you find a clear flaw.\n"
-            )
+Agent 1 (Evidence Collector): {_get(a1, "diagnosis")} | Confidence: {_get(a1, "confidence")}
+Reasoning: {_get(a1, "primary_reasoning")}
+Alternative rejected: {_get(a1, "alternative_rejected")} because {_get(a1, "rejection_reason")}
 
-    critique_display = state.get("critique", "No critique available.")
+Agent 2 (Symptom Scorer): {_get(a2, "diagnosis")} | Confidence: {_get(a2, "confidence")}
+Reasoning: {_get(a2, "primary_reasoning")}
+Top 3 considered: {_get(a2, "top3")}
 
-    return f"""### PATIENT DOSSIER ###
-{state["full_dossier"][:12000]}
+Agent 3 (Timeline Analyst): {_get(a3, "diagnosis")} | Confidence: {_get(a3, "confidence")}
+Reasoning: {_get(a3, "primary_reasoning")}
+Timeline: {_get(a3, "timeline_duration")}
 
-### SPECIALIST INPUTS ###
-Agent 1 (Evidence Collector): {_get(a1, "diagnosis")} | Reasoning: {_get(a1, "primary_reasoning")}
-Agent 2 (Eliminator): {_get(a2, "diagnosis")} | Reasoning: {_get(a2, "primary_reasoning")}
-Agent 3 (Timeline Analyst): {_get(a3, "diagnosis")} | Reasoning: {_get(a3, "primary_reasoning")}
-{critic_hint}
-### FULL CRITIC REPORT ###
-{critique_display}
+Section 2 — The full dossier:
+{dossier}
 
-### TASK ###
-Render a final adjudication. Review the dossier and specialist inputs independently.
-Output a single JSON object:
-{{"final_diagnosis": "text", "mapped_category": "EXACT_CATEGORY", "confidence_score": 0-100, "final_reasoning": "text", "winning_agent": "name"}}
+Section 3 — The full 21-category disease reference:
+{full_disease_ref}
 
-Valid categories: {PHMRC_LIST}
+Section 4 — Instructions:
+The three agents were given only the categories in the triage group. If you believe the triage was wrong and the correct category is from a different group, you may choose from the full list above. Otherwise prefer the agents' proposals. Give more weight to agents whose cited reasoning directly quotes or closely references specific findings from the dossier.
 
-PREFERENCE RULE: Prefer diagnoses already proposed by the agents or critic if they are well-supported by the dossier. However, if the dossier clearly and unambiguously points to a different PHMRC category that no agent considered (e.g. all agents said Pneumonia but the dossier contains strong AIDS markers), you MAY override — but you MUST explicitly state in final_reasoning why the agents' proposals were collectively insufficient and what specific dossier evidence drives your override. Do not hedge to a vague catch-all.
+Section 5 — Output format:
+```
+{{"final_diagnosis": "<category>", "mapped_category": "<exact PHMRC category name>", "confidence_score": <0-100>, "final_reasoning": "<two sentences: which agents you agreed with and what dossier evidence drove the decision>", "winning_agent": "<agent1_evidence_collector / agent2_symptom_scorer / agent3_timeline_analyst / split>"}}
+```
 
-After the JSON, repeat: [FINAL_DIAGNOSIS] Category [/FINAL_DIAGNOSIS]"""
-
+Section 6 — [FINAL_DIAGNOSIS] tag line.
+"""
 
 def consensus_node(state: VAState) -> dict:
     """
     Fast-path node for unanimous agent consensus.
     Bypasses Critic and Adjudicator LLMs.
     """
-    # All 3 agents agree, so we can pick any of them (they are all normalized)
     a1 = state["agent1_output"]["diagnosis"]
     m1 = fuzzy_match_category(str(a1))
-    
-    print(f"  [FAST PATH] Unanimous consensus detected: {m1}. Bypassing LLM adjudication.")
+
+    # Use confidence score from active model profile
+    conf_score = ACTIVE_PROFILE.get("consensus_confidence", 72)
+    print(f"  [CONSENSUS] All three agents: {m1}. Confidence set to {conf_score} (profile: {ACTIVE_PROFILE['model']}).")
     
     return {
         "final_diagnosis":  str(a1),
         "mapped_category":  str(m1),
-        "confidence_score": 90,
+        "confidence_score": conf_score,
         "final_reasoning":  "Unanimous agent consensus",
         "winning_agent":    "all",
     }
 
-
 def adjudicator_node(state: VAState) -> dict:
-    # ── PARSE CRITIC VERDICT ────────────────────────────────────────────────
-    critique_str = state.get("critique", "")
-    critic_verdict = _parse_critique(critique_str)
-
-    # ── ALWAYS USE LLM ADJUDICATION ─────────────────────────────────────────
-    # Consensus signals are passed as strong hints but never bypass reasoning.
-    # This ensures critic and adjudicator always do their full job.
-    prompt = _build_adjudication_prompt(state, critic_verdict)
+    prompt = _build_adjudication_prompt(state)
     response = _LLM.invoke([
         SystemMessage(content=_ADJUDICATOR_SYSTEM),
         HumanMessage(content=prompt),
@@ -156,28 +84,21 @@ def adjudicator_node(state: VAState) -> dict:
     cleaned = strip_thoughts(raw_text)
     result = parse_best_json(cleaned)
 
-    # ── RESOLVE mapped_category with fuzzy matching ──────────────────────────
+    # Resolve mapped_category with fuzzy matching
     raw_cat = result.get("mapped_category", result.get("diagnosis", ""))
     cat = fuzzy_match_category(str(raw_cat)) if raw_cat else None
 
     if not cat:
-        # Last resort: try final_diagnosis field
         raw_fd = result.get("final_diagnosis", "")
         cat = fuzzy_match_category(str(raw_fd)) if raw_fd else None
 
     if not cat:
         cat = "Other Defined Causes of Child Deaths"
 
-    # ── Determine winning_agent label ────────────────────────────────────────
-    winning = result.get("winning_agent", "Adjudicator Override")
-    if critic_verdict and critic_verdict.get("verdict") == "consensus":
-        # Preserve the fact that this was a confirmed consensus (not a blind one)
-        winning = winning if winning != "Adjudicator Override" else "Confirmed Consensus"
-
     return {
         "final_diagnosis":  str(result.get("final_diagnosis", result.get("diagnosis", cat))),
         "mapped_category":  str(cat),
         "confidence_score": int(result.get("confidence_score", 50)),
         "final_reasoning":  str(result.get("final_reasoning", result.get("primary_reasoning", "No reasoning provided."))),
-        "winning_agent":    str(winning),
+        "winning_agent":    str(result.get("winning_agent", "Adjudicator Override")),
     }

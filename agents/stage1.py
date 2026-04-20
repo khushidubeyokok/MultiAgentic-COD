@@ -5,52 +5,41 @@ Stage 1: Broad Triage Classifier.
 Groups dossiers into one of three broad categories to narrow the specialist's search space.
 """
 
-from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
-from agents.utils import strip_thoughts, parse_best_json
-from agents.few_shot_examples import format_few_shot_block
+from agents.utils import strip_thoughts, parse_best_json, GEMMA4_THINKING_PREFIX
+from agents.model_config import make_llm
 
-# ── Global Few-Shot Library ──────────────────────────────────────────────────
-# Initialized by run_pipeline.py on startup
-FEW_SHOT_LIBRARY = {}
+_LLM = make_llm()
 
-_LLM = ChatOllama(
-    model="deepseek-r1:8b",
-    temperature=0,
-    num_ctx=8192,
-    num_predict=4096,  # Increased from 512 to prevent truncation
-)
+# New system prompt (under 40 words)
+_STAGE1_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a medical triage classifier. Read the patient dossier and assign it to exactly one of three groups based on the dominant cause of illness. Output only JSON."
 
-_STAGE1_SYSTEM = (
-    "You are a triage classifier. You MUST follow these RULES in order:\n"
-    "1. RULE 1 (EXTERNAL PRIORITY): If the dossier mentions ANY bite, sting, fall, fire, drowning, collision, poisoning, or violence — "
-    "even if the patient has medical symptoms (fever, seizures) — you MUST classify as 'External/Trauma'.\n"
-    "2. RULE 2 (CHRONICITY): If no Rule 1 condition exists AND the illness lasted weeks/months with wasting or HIV markers → 'Chronic/Systemic/Other'.\n"
-    "3. RULE 3: Everything else → 'Infectious/Disease'.\n\n"
-    "Output ONLY a JSON object: {\"broad_group\": \"...\", \"triage_reasoning\": \"...\"}"
-)
+_STAGE1_USER_PROMPT_TEMPLATE = """### GROUP DEFINITIONS ###
 
-_STAGE1_PROMPT = """### TARGET GROUPS ###
-GROUP A: External/Trauma
-GROUP B: Infectious/Disease
-GROUP C: Chronic/Systemic/Other
+- Infectious/Disease: Includes Pneumonia, Malaria, Meningitis, Encephalitis, Sepsis, Diarrhea/Dysentery, Measles, AIDS, Hemorrhagic fever, and Other Infectious Diseases. This group unifies illnesses caused by pathogens that typically present with fever and acute or chronic physiological deterioration.
 
-### TASK ###
-Classify the following dossier. 
-IMPORTANT: Check the [Injury/Accident] section. If it reports a bite or sting, use GROUP A.
+- External/Trauma: Includes Drowning, Road Traffic, Falls, Fires, Violent Death, Poisonings, and Bite of Venomous Animal. This group unifies deaths caused by physical forces, accidents, or external agents acting on the body from the environment.
+
+- Chronic/Systemic/Other: Includes Other Cardiovascular Diseases, Other Cancers, Other Digestive Diseases, and Other Defined Causes of Child Deaths. This group unifies non-infectious, long-term conditions or specific neonatal/congenital etiologies that do not fit the acute infectious or traumatic patterns.
+
+### CLASSIFICATION RULE ###
+Classify by what CAUSED the illness, not what symptoms appeared. For example, if a child fell and later had seizures, the cause is External/Trauma.
 
 ### PATIENT DOSSIER ###
 {dossier}
+
+### OUTPUT INSTRUCTION ###
+Output exactly this JSON format:
+{{"broad_group": "External/Trauma" | "Infectious/Disease" | "Chronic/Systemic/Other", "triage_reasoning": "one sentence"}}
 """
 
 def stage1_node(state: VAState) -> dict:
     dossier = state["full_dossier"]
     
-    # We remove few-shot for triage to prevent the model from over-relying on similar symptoms 
-    # and ignoring the binary triage rules.
-    prompt = _STAGE1_PROMPT.format(dossier=dossier[:12000])
+    # Pass full dossier text as requested
+    prompt = _STAGE1_USER_PROMPT_TEMPLATE.format(dossier=dossier)
 
     response = _LLM.invoke([
         SystemMessage(content=_STAGE1_SYSTEM),

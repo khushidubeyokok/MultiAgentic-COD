@@ -280,22 +280,27 @@ def fuzzy_match_category(text: str) -> str | None:
     return None
 
 
+GEMMA4_THINKING_PREFIX = "<|think|>\n"
+
 def strip_thoughts(text: str) -> str:
     """
     Remove <thought>...</thought> and <think>...</think> blocks from output.
-    Also handles partial/unclosed tags and strips remaining reasoning-like XML tags.
+    Also handles gemma4 channel thought formats.
     """
     if not text:
         return ""
     
-    # 1. Handle both <thought> and <think> closed blocks
+    # 1. Format A: Deepseek/OpenThinker blocks
     cleaned = re.sub(r"<(thought|think)>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    
-    # 2. Handle cases where a block is opened but never closed (partial output)
     cleaned = re.sub(r"<(thought|think)>.*", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+
+    # 2. Format B: gemma4 closed (<|channel>thought\n[reasoning]<channel|>)
+    cleaned = re.sub(r"<\|channel>thought\n.*?<channel\|>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+
+    # 3. Format C: gemma4 unclosed (<|channel>thought\n[reasoning never closes])
+    cleaned = re.sub(r"<\|channel>thought\n.*", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
     
-    # 3. Strip any remaining XML-style tags that look like reasoning wrappers
-    # This also helps with things like <reasoning>, <analysis>, etc.
+    # Final pass: Strip any remaining XML-style tags and strip whitespace
     cleaned = re.sub(r"<[^>]+>", "", cleaned)
     
     return cleaned.strip()
