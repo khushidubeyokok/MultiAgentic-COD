@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agents.state import VAState
 from agents.utils import parse_best_json, GEMMA4_THINKING_PREFIX
 from agents.model_config import make_llm
-from agents.disease_ref import get_disease_ref
+from agents.disease_ref import get_disease_ref, get_category_guide
 
 # Instantiate LLM once at module level
 _LLM = make_llm()
@@ -18,7 +18,7 @@ _LLM = make_llm()
 # AGENT 1 — THE EVIDENCE COLLECTOR 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_AGENT1_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical evidence collector. You read patient dossiers and identify cause of death by working bottom-up from documented symptoms to the best matching disease category. Output only JSON."
+_AGENT1_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical evidence collector identifying cause of death bottom-up from symptoms. If the illness is chronic (>2 weeks) or has underlying conditions like HIV/malnutrition, do NOT choose Pneumonia. Output only JSON."
 
 _AGENT1_PROTOCOL = """Section 1 — Triage context placeholder:
 {triage_context}
@@ -41,7 +41,7 @@ Section 4 — One line: After the JSON write: [FINAL_DIAGNOSIS] Category [/FINAL
 # AGENT 2 — THE SYMPTOM SCORER 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_AGENT2_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical checklist evaluator. You answer binary yes/no questions about a patient dossier, then score disease categories mechanically based on your answers. Output only JSON."
+_AGENT2_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical checklist evaluator scoring disease categories mechanically. If the illness is chronic (>2 weeks) or has underlying conditions like HIV/malnutrition, do NOT choose Pneumonia. Output only JSON."
 
 _AGENT2_PROTOCOL = """Section 1 — Triage context placeholder:
 {triage_context}
@@ -84,7 +84,7 @@ Section 5 — [FINAL_DIAGNOSIS] tag line.
 # AGENT 3 — THE TIMELINE ANALYST 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_AGENT3_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical timeline analyst. You reconstruct the chronological story of a child's illness from baseline to death and identify cause of death from the trajectory. Output only JSON."
+_AGENT3_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical timeline analyst identifying cause of death from the disease trajectory. If the illness is chronic (>2 weeks) or has underlying conditions like HIV/malnutrition, do NOT choose Pneumonia. Output only JSON."
 
 _AGENT3_PROTOCOL = """Section 1 — Triage context placeholder:
 {triage_context}
@@ -108,14 +108,17 @@ Section 4 — [FINAL_DIAGNOSIS] tag line.
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: str, broad_group: str) -> dict:
-    # 1. Call get_disease_ref(broad_group)
+    # 1. Call get_disease_ref(broad_group) and get_category_guide(broad_group)
     disease_list_text = get_disease_ref(broad_group)
+    guide_text = get_category_guide(broad_group)
 
     # 2. Build triage_context
     triage_context = (
         f"Broad Group: {broad_group}\n"
         f"Your diagnosis must come from this list unless you have strong evidence the triage was wrong:\n"
-        f"{disease_list_text}"
+        f"{disease_list_text}\n\n"
+        f"### CRITICAL DIAGNOSTIC GUIDELINES ###\n"
+        f"{guide_text}"
     )
 
     # 3. Inject triage_context into the protocol string

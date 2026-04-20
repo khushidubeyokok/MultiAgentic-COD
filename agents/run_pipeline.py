@@ -16,8 +16,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MODE                = "demo"  # "demo" for stratified sample | "full" for all cases
-SAMPLE_SIZE         = 10      # used only when MODE == "demo"
+MODE                = "full"  # "demo" for stratified sample | "full" for all cases
+SAMPLE_SIZE         = 300      # used only when MODE == "demo"
 DELAY_BETWEEN_CASES = 1       # seconds between cases
 RANDOM_SEED         = None      # fixed seed for reproducibility
 

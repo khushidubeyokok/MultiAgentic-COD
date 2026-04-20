@@ -13,7 +13,7 @@ from agents.disease_ref import get_full_disease_ref
 
 _LLM = make_llm()
 
-_ADJUDICATOR_SYSTEM = GEMMA4_THINKING_PREFIX + "You are the final diagnostic arbitrator. Three specialist agents have each analysed a patient dossier and given you their diagnosis and reasoning. Your job is to weigh their input alongside the dossier and render one final verdict. Output only JSON."
+_ADJUDICATOR_SYSTEM = GEMMA4_THINKING_PREFIX + "You are the final diagnostic arbitrator. Three specialist agents have each analysed a patient dossier and given you their diagnosis and reasoning. Analyze the top 3 categories returned by Agent 2 (Symptom Scorer) specifically. Your job is to weigh their input alongside the dossier and render one final verdict. Output only JSON."
 
 def _build_adjudication_prompt(state: VAState) -> str:
     a1, a2, a3 = state["agent1_output"], state["agent2_output"], state["agent3_output"]

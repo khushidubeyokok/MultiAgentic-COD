@@ -31,7 +31,7 @@ FINAL = {
 }
 
 # Change this single variable to switch profiles
-ACTIVE_PROFILE = LOCAL_TRIAL
+ACTIVE_PROFILE = FINAL
 
 def make_llm() -> ChatOllama:
     """

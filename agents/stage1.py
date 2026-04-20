@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agents.state import VAState
 from agents.utils import strip_thoughts, parse_best_json, GEMMA4_THINKING_PREFIX
 from agents.model_config import make_llm
+from agents.disease_ref import get_full_disease_ref
 
 _LLM = make_llm()
 
@@ -24,6 +25,9 @@ _STAGE1_USER_PROMPT_TEMPLATE = """### GROUP DEFINITIONS ###
 
 - Chronic/Systemic/Other: Includes Other Cardiovascular Diseases, Other Cancers, Other Digestive Diseases, and Other Defined Causes of Child Deaths. This group unifies non-infectious, long-term conditions or specific neonatal/congenital etiologies that do not fit the acute infectious or traumatic patterns.
 
+### FULL 21-CATEGORY DISEASE REFERENCE ###
+{disease_ref}
+
 ### CLASSIFICATION RULE ###
 Classify by what CAUSED the illness, not what symptoms appeared. For example, if a child fell and later had seizures, the cause is External/Trauma.
 
@@ -37,9 +41,13 @@ Output exactly this JSON format:
 
 def stage1_node(state: VAState) -> dict:
     dossier = state["full_dossier"]
+    disease_ref = get_full_disease_ref()
     
-    # Pass full dossier text as requested
-    prompt = _STAGE1_USER_PROMPT_TEMPLATE.format(dossier=dossier)
+    # Pass full dossier and full disease reference
+    prompt = _STAGE1_USER_PROMPT_TEMPLATE.format(
+        dossier=dossier,
+        disease_ref=disease_ref
+    )
 
     response = _LLM.invoke([
         SystemMessage(content=_STAGE1_SYSTEM),

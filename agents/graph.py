@@ -19,7 +19,6 @@ from langgraph.graph import StateGraph, START, END
 
 from agents.state import VAState
 from agents.agents import agent1_node, agent2_node, agent3_node
-from agents.critic import critic_node
 from agents.adjudicator import adjudicator_node, consensus_node
 from agents.stage1 import stage1_node
 from agents.preprocessor import preprocess_dossier
@@ -88,7 +87,6 @@ def build_graph():
     builder.add_node("agent1_node", _with_retry(agent1_node))
     builder.add_node("agent2_node", _with_retry(agent2_node))
     builder.add_node("agent3_node", _with_retry(agent3_node))
-    builder.add_node("critic_node", critic_node)
     builder.add_node("adjudicator_node", adjudicator_node)
     builder.add_node("consensus_node", consensus_node)
     
@@ -121,12 +119,11 @@ def build_graph():
         route_after_agents,
         {
             "consensus": "consensus_node",
-            "split": "critic_node"
+            "split": "adjudicator_node"
         }
     )
 
-    # Path A: Split resolution (LLM Heavy)
-    builder.add_edge("critic_node", "adjudicator_node")
+    # Path A: Split resolution (LLM Adjudication)
     builder.add_edge("adjudicator_node", END)
 
     # Path B: Consensus (Fast Path)
@@ -176,8 +173,6 @@ def run_single_case(case: dict) -> dict:
                 conf = output.get(field, {}).get("confidence", "N/A")
                 persona = node_name.replace("_", " ").title()
                 print(f"  [STREAM] {persona} finished: {diag} [{conf}]")
-            elif "critic" in node_name:
-                print(f"  [STREAM] Critic adversarial analysis complete.")
             elif "adjudicator" in node_name:
                 print(f"  [STREAM] Adjudicator final verdict rendered.")
             elif "consensus" in node_name:

@@ -60,3 +60,30 @@ def get_full_disease_ref() -> str:
         for cat, desc in group_dict.items():
             output.append(f"[{cat}]\n{desc}")
     return "\n\n".join(output)
+
+def get_category_guide(broad_group: str) -> str:
+    """
+    Filters the PHMRC_CATEGORY_GUIDE from utils.py to only include categories
+    relevant to the specified broad_group.
+    """
+    from agents.utils import PHMRC_CATEGORY_GUIDE
+    import re
+    
+    group_categories = REFS.get(broad_group, {}).keys()
+    if not group_categories:
+        return ""
+
+    # Split the guide into sections by double newline
+    sections = re.split(r"\n\n", PHMRC_CATEGORY_GUIDE.strip())
+    filtered = []
+    for section in sections:
+        line = section.lstrip()
+        if line.startswith("- "):
+            # Extract category name from "- CategoryName:"
+            cat_match = re.match(r"^- (.*?):", line)
+            if cat_match:
+                cat_name = cat_match.group(1).strip()
+                if cat_name in group_categories:
+                    filtered.append(section)
+    
+    return "\n\n".join(filtered)
