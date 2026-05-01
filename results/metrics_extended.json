@@ -1,0 +1,173 @@
+{
+    "accuracy": 0.49056603773584906,
+    "CCC": 0.4650943396226415,
+    "PCCC": 0.6037735849056605,
+    "CSMF_accuracy": 0.40476190476190477,
+    "per_category": [
+        {
+            "category": "Bite of Venomous Animal",
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 14,
+            "correct": 14
+        },
+        {
+            "category": "Malaria",
+            "precision": 0.8888888888888888,
+            "recall": 0.5714285714285714,
+            "f1": 0.6956521739130435,
+            "support": 14,
+            "correct": 8
+        },
+        {
+            "category": "Measles",
+            "precision": 1.0,
+            "recall": 0.07142857142857142,
+            "f1": 0.13333333333333333,
+            "support": 14,
+            "correct": 1
+        },
+        {
+            "category": "Pneumonia",
+            "precision": 0.75,
+            "recall": 0.2727272727272727,
+            "f1": 0.39999999999999997,
+            "support": 11,
+            "correct": 3
+        },
+        {
+            "category": "Other Defined Causes of Child Deaths",
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "correct": 0
+        },
+        {
+            "category": "Other Infectious Diseases",
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "correct": 0
+        },
+        {
+            "category": "Encephalitis",
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "correct": 0
+        },
+        {
+            "category": "Meningitis",
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "correct": 0
+        },
+        {
+            "category": "Sepsis",
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "correct": 0
+        },
+        {
+            "category": "AIDS",
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "correct": 0
+        }
+    ],
+    "subgroups": {
+        "narrative": {
+            "narrative_acc": 0.45,
+            "no_narrative_acc": 0.6153846153846154
+        },
+        "broad_groups": {
+            "Infectious/Disease": {
+                "acc": 0.3157894736842105,
+                "count": 38
+            },
+            "External/Trauma": {
+                "acc": 1.0,
+                "count": 14
+            },
+            "Chronic/Systemic/Other": {
+                "acc": 0.0,
+                "count": 1
+            }
+        },
+        "confidence_bands": {
+            "high": {
+                "acc": 0.38095238095238093,
+                "count": 21
+            },
+            "medium": {
+                "acc": 0.5625,
+                "count": 32
+            },
+            "low": {
+                "acc": 0.0,
+                "count": 0
+            }
+        },
+        "consensus": {
+            "consensus_acc": 0.5806451612903226,
+            "adjudicator_acc": 0.36363636363636365,
+            "consensus_rate": 0.5849056603773585
+        }
+    },
+    "confusion_top5": [
+        {
+            "ground_truth": "Measles",
+            "predicted": "Other Infectious Diseases",
+            "count": 8
+        },
+        {
+            "ground_truth": "Measles",
+            "predicted": "Sepsis",
+            "count": 3
+        },
+        {
+            "ground_truth": "Malaria",
+            "predicted": "Other Infectious Diseases",
+            "count": 2
+        },
+        {
+            "ground_truth": "Malaria",
+            "predicted": "Meningitis",
+            "count": 2
+        },
+        {
+            "ground_truth": "Pneumonia",
+            "predicted": "Sepsis",
+            "count": 2
+        }
+    ],
+    "agent_accuracy": {
+        "Agent 1": {
+            "accuracy": 0.49056603773584906,
+            "macro_f1": 0.10531813865147199
+        },
+        "Agent 2": {
+            "accuracy": 0.41509433962264153,
+            "macro_f1": 0.09302091206853112
+        },
+        "Agent 3": {
+            "accuracy": 0.4716981132075472,
+            "macro_f1": 0.09426129426129426
+        }
+    },
+    "macro_f1": 0.5572463768115942,
+    "weighted_f1": 0.5661471151216845,
+    "winning_agent_dist": {
+        "Adjudicator": 1.0
+    }
+}
