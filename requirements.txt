@@ -1,4 +1,5 @@
 langgraph
+# Model: gemma4:e2b via Ollama (run: ollama pull gemma4:e2b)
 langchain-ollama
 langchain-core
 python-dotenv
