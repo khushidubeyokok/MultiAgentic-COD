@@ -14,6 +14,8 @@ import math
 import random
 from pathlib import Path
 
+from agents.utils import PHMRC_CATEGORIES
+
 
 # ── Field defaults applied when a dossier entry is missing keys ──────────────
 _FIELD_DEFAULTS = {
@@ -46,39 +48,55 @@ def _stratified_sample(
     rng: random.Random,
 ) -> list:
     """
-    Stratified sampling by ground_truth category.
+    Proportional stratified sampling by ground_truth category.
 
-    Strategy:
-      1. Compute floor(sample_size / n_categories) per category.
-      2. Sample that many from each category (or all available if fewer).
-      3. If total < sample_size, fill remaining slots randomly from the
-         leftover pool (cases not already selected) using the same RNG.
+    Uses the Largest Remainder Method (Hamilton method) to convert fractional
+    proportional allocations into an exact integer sample size.
     """
-    # Group cases by category
+    if sample_size <= 0 or not cases:
+        return []
+
+    if sample_size >= len(cases):
+        selected = cases[:]
+        rng.shuffle(selected)
+        return selected
+
     category_buckets: dict = {}
     for case in cases:
         cat = case["ground_truth"] or "UNKNOWN"
         category_buckets.setdefault(cat, []).append(case)
 
-    n_categories = len(category_buckets)
-    per_category = math.floor(sample_size / n_categories) if n_categories else 0
+    total_available = len(cases)
+    floor_alloc: dict[str, int] = {}
+    remainders: dict[str, float] = {}
+
+    for cat, bucket in category_buckets.items():
+        exact = len(bucket) * sample_size / total_available
+        floor_alloc[cat] = min(math.floor(exact), len(bucket))
+        remainders[cat] = exact - floor_alloc[cat]
+
+    deficit = sample_size - sum(floor_alloc.values())
+    sorted_by_remainder = sorted(
+        category_buckets,
+        key=lambda cat: (remainders[cat], len(category_buckets[cat]), cat),
+        reverse=True,
+    )
+
+    final_alloc = dict(floor_alloc)
+    for cat in sorted_by_remainder:
+        if deficit <= 0:
+            break
+        if final_alloc[cat] < len(category_buckets[cat]):
+            final_alloc[cat] += 1
+            deficit -= 1
 
     selected: list = []
-    leftover: list = []
-
     for cat, bucket in category_buckets.items():
         shuffled = bucket[:]
         rng.shuffle(shuffled)
-        take = min(per_category, len(shuffled))
-        selected.extend(shuffled[:take])
-        leftover.extend(shuffled[take:])
+        selected.extend(shuffled[:final_alloc[cat]])
 
-    # Fill remaining slots from the leftover pool
-    remaining = sample_size - len(selected)
-    if remaining > 0 and leftover:
-        rng.shuffle(leftover)
-        selected.extend(leftover[:remaining])
-
+    rng.shuffle(selected)
     return selected
 
 
@@ -87,6 +105,7 @@ def load_dossiers(
     mode: str = "demo",
     sample_size: int = 30,
     seed: int = 42,
+    exclude_ids: set = None,
 ) -> list:
     """
     Load patient dossiers from a JSON file.
@@ -117,6 +136,9 @@ def load_dossiers(
     # Apply field defaults to every entry
     cases: list = [_apply_defaults(entry) for entry in raw]
 
+    if exclude_ids:
+        cases = [c for c in cases if str(c.get("case_id", "")) not in exclude_ids]
+
     if mode == "full":
         result = cases
     elif mode == "demo":
@@ -124,6 +146,22 @@ def load_dossiers(
         result = _stratified_sample(cases, sample_size, rng)
     else:
         raise ValueError(f"Unknown mode '{mode}'. Choose 'demo' or 'full'.")
+
+    # ── Filter to valid PHMRC categories ─────────────────────────────────────
+    valid_set = set(PHMRC_CATEGORIES)
+    filtered = []
+    skipped = []
+    for c in result:
+        gt = c.get("ground_truth", "").strip()
+        if gt in valid_set:
+            filtered.append(c)
+        else:
+            skipped.append((c.get("case_id", "?"), gt))
+    if skipped:
+        print(f"[WARN] Skipping {len(skipped)} case(s) with ground_truth outside 21 valid PHMRC categories:")
+        for cid, gt in skipped:
+            print(f"  case_id={cid} | ground_truth='{gt}'")
+    result = filtered
 
     # ── Print summary ────────────────────────────────────────────────────────
     unique_cats = sorted({c["ground_truth"] or "UNKNOWN" for c in result})
