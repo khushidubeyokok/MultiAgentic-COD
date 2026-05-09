@@ -1,0 +1,62 @@
+==============================================================
+  EXTENDED EVALUATION METRICS
+==============================================================
+Dataset : results/predictions.csv
+Cases   : 53  |  Categories : 21  |  Seed : (as run)
+
+--- INDIVIDUAL-LEVEL METRICS ---
+Top-1 Accuracy          : 49.06%  (26/53)
+CCC                     : 0.465
+PCCC (top-3)            : 0.604
+
+--- POPULATION-LEVEL METRICS ---
+CSMF Accuracy           : 0.405
+
+--- PER-AGENT ACCURACY ---
+Agent 1 (Evidence Collector) : 49.06%  |  Macro F1: 0.105
+Agent 2 (Symptom Scorer) : 41.51%  |  Macro F1: 0.093
+Agent 3 (Timeline Analyst) : 47.17%  |  Macro F1: 0.094
+
+--- PER-CATEGORY METRICS ---
+Category                               | Precision | Recall | F1    | Support | Correct
+-------------------------------------------------------------------------------------
+Bite of Venomous Animal                | 1.000     | 1.000  | 1.000 | 14      | 14
+Malaria                                | 0.889     | 0.571  | 0.696 | 14      | 8
+Measles                                | 1.000     | 0.071  | 0.133 | 14      | 1
+Pneumonia                              | 0.750     | 0.273  | 0.400 | 11      | 3
+Other Defined Causes of Child Deaths   | 0.000     | 0.000  | 0.000 | 0       | 0
+Other Infectious Diseases              | 0.000     | 0.000  | 0.000 | 0       | 0
+Encephalitis                           | 0.000     | 0.000  | 0.000 | 0       | 0
+Meningitis                             | 0.000     | 0.000  | 0.000 | 0       | 0
+Sepsis                                 | 0.000     | 0.000  | 0.000 | 0       | 0
+AIDS                                   | 0.000     | 0.000  | 0.000 | 0       | 0
+
+--- MACRO / WEIGHTED AVERAGES ---
+Macro F1    : 0.557
+Weighted F1 : 0.566
+
+--- TOP-5 CONFUSION PAIRS ---
+[Measles → Other Infectious Diseases : 8 cases]
+[Measles → Sepsis : 3 cases]
+[Malaria → Other Infectious Diseases : 2 cases]
+[Malaria → Meningitis : 2 cases]
+[Pneumonia → Sepsis : 2 cases]
+
+--- SUBGROUP BREAKDOWN ---
+Narrative Acc    : 45.00%
+No Narrative Acc : 61.54%
+Infectious/Disease       : 31.58% (38 cases)
+External/Trauma          : 100.00% (14 cases)
+Chronic/Systemic/Other   : 0.00% (1 cases)
+Confidence Bands:
+  High   : 38.10% (21 cases)
+  Medium : 56.25% (32 cases)
+  Low    : 0.00% (0 cases)
+
+--- CONSENSUS ANALYSIS ---
+Consensus rate   : 58.49%
+Consensus acc    : 58.06%
+Adjudicator acc  : 36.36%
+
+--- WINNING AGENT DISTRIBUTION ---
+Adjudicator     : 100.00%
