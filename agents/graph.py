@@ -110,8 +110,8 @@ def build_graph():
 
     # Conditional branching: consensus vs split
     def route_after_agents(state: VAState):
-        if check_consensus(state):
-            return "consensus"
+        # Shared prompt bias can make all agents agree on a terminal syndrome
+        # such as Sepsis. Always let the adjudicator review the full dossier.
         return "split"
 
     builder.add_conditional_edges(

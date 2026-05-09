@@ -4,39 +4,50 @@ agents/model_config.py
 Single source of truth for model selection and ChatOllama configuration.
 """
 
-from langchain_ollama import ChatOllama
+from typing import TYPE_CHECKING
 
-# LOCAL_TRIAL profile: gemma4:e2b
-LOCAL_TRIAL = {
+if TYPE_CHECKING:
+    from langchain_ollama import ChatOllama
+
+# TEST profile: 50-case demo run
+TEST = {
     "model": "gemma4:e2b",
-    "temperature": 1.0,
+    "temperature": 0.2,
     "top_p": 0.95,
     "top_k": 64,
     "num_ctx": 8192,
     "num_predict": 2048,
     "timeout": 180,
     "consensus_confidence": 72,
+    "sample_size": 10,
+    "sample_mode": "demo",
+    "seed": 7,
 }
 
-# FINAL profile: gemma4:31b
-FINAL = {
-    "model": "gemma4:31b",
-    "temperature": 1.0,
+# FULL profile: 500-case demo run
+FULL = {
+    "model": "gemma4:e2b",
+    "temperature": 0.2,
     "top_p": 0.95,
     "top_k": 64,
-    "num_ctx": 16384,
-    "num_predict": 4096,
-    "timeout": 300,
-    "consensus_confidence": 90,
+    "num_ctx": 8192,
+    "num_predict": 2048,
+    "timeout": 180,
+    "consensus_confidence": 72,
+    "sample_size": 500,
+    "sample_mode": "demo",
+    "seed": 7,
 }
 
 # Change this single variable to switch profiles
-ACTIVE_PROFILE = FINAL
+ACTIVE_PROFILE = FULL
 
-def make_llm() -> ChatOllama:
+def make_llm() -> "ChatOllama":
     """
     Constructs and returns a ChatOllama instance using the ACTIVE_PROFILE.
     """
+    from langchain_ollama import ChatOllama
+
     return ChatOllama(
         model=ACTIVE_PROFILE["model"],
         temperature=ACTIVE_PROFILE["temperature"],

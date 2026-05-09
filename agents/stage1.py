@@ -8,14 +8,14 @@ Groups dossiers into one of three broad categories to narrow the specialist's se
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
-from agents.utils import strip_thoughts, parse_best_json, GEMMA4_THINKING_PREFIX
+from agents.utils import parse_best_json
 from agents.model_config import make_llm
 from agents.disease_ref import get_full_disease_ref
 
 _LLM = make_llm()
 
 # New system prompt (under 40 words)
-_STAGE1_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a medical triage classifier. Read the patient dossier and assign it to exactly one of three groups based on the dominant cause of illness. Output only JSON."
+_STAGE1_SYSTEM = "You are a medical triage classifier. Read the patient dossier and assign it to exactly one of three groups based on the dominant cause of illness. Output only JSON."
 
 _STAGE1_USER_PROMPT_TEMPLATE = """### GROUP DEFINITIONS ###
 
@@ -30,6 +30,9 @@ _STAGE1_USER_PROMPT_TEMPLATE = """### GROUP DEFINITIONS ###
 
 ### CLASSIFICATION RULE ###
 Classify by what CAUSED the illness, not what symptoms appeared. For example, if a child fell and later had seizures, the cause is External/Trauma.
+If illness lasted more than 14 days with weight loss, edema, masses, heart fluid, or progressive decline, choose Chronic/Systemic/Other even if fever or cough is present.
+If diarrhea/vomiting started first and continued for most of the illness, keep Infectious/Disease and preserve that gastrointestinal syndrome for specialists.
+Do not classify by terminal events alone such as unconsciousness, oxygen use, inability to eat/drink, or rapid deterioration shortly before death.
 
 ### PATIENT DOSSIER ###
 {dossier}
@@ -54,9 +57,7 @@ def stage1_node(state: VAState) -> dict:
         HumanMessage(content=prompt),
     ])
     raw_text = response.content if hasattr(response, "content") else str(response)
-    cleaned = strip_thoughts(raw_text)
-    
-    parsed = parse_best_json(cleaned)
+    parsed = parse_best_json(raw_text)
     group = parsed.get("broad_group", "Infectious/Disease")
     
     # Validation

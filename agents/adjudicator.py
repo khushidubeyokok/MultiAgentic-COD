@@ -4,21 +4,31 @@ agents/adjudicator.py
 Final adjudicator node. Weighs specialist agent inputs and renders a final verdict.
 """
 
+import re
+
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
-from agents.utils import parse_best_json, strip_thoughts, fuzzy_match_category, GEMMA4_THINKING_PREFIX
+from agents.utils import parse_best_json, fuzzy_match_category
 from agents.model_config import make_llm, ACTIVE_PROFILE
 from agents.disease_ref import get_full_disease_ref
 
 _LLM = make_llm()
 
-_ADJUDICATOR_SYSTEM = GEMMA4_THINKING_PREFIX + "You are the final diagnostic arbitrator. Three specialist agents have each analysed a patient dossier and given you their diagnosis and reasoning. Analyze the top 3 categories returned by Agent 2 (Symptom Scorer) specifically. Your job is to weigh their input alongside the dossier and render one final verdict. Output only JSON."
+_ADJUDICATOR_SYSTEM = "You are the final diagnostic arbitrator. Include a clear clinical verdict rationale inside final_reasoning. Your final answer must be only valid JSON, with no markdown."
+
+def _duration_days(text: str) -> int | None:
+    match = re.search(r"\bDuration:\s*(\d+)", text, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
 
 def _build_adjudication_prompt(state: VAState) -> str:
     a1, a2, a3 = state["agent1_output"], state["agent2_output"], state["agent3_output"]
     dossier = state["full_dossier"]
     full_disease_ref = get_full_disease_ref()
+    # Rule‑based guard removed – adjudicator now relies only on agents and dossier.
+    guard_text = "None"
 
     def _get(d: dict, k: str) -> str:
         return str(d.get(k, "Unknown"))
@@ -43,15 +53,23 @@ Section 2 — The full dossier:
 Section 3 — The full 21-category disease reference:
 {full_disease_ref}
 
-Section 4 — Instructions:
+Section 4 — Rule-based audit suggestion:
+{guard_text}
+
+Section 5 — Instructions:
 The three agents were given only the categories in the triage group. If you believe the triage was wrong and the correct category is from a different group, you may choose from the full list above. Otherwise prefer the agents' proposals. Give more weight to agents whose cited reasoning directly quotes or closely references specific findings from the dossier.
+The rule-based audit is only a suggestion, not a verdict. If all three agents strongly agree and their reasoning is directly supported by the dossier, you may override the audit suggestion. If the audit catches a primary syndrome that agents treated as terminal Sepsis/Malaria, prefer the audit suggestion.
+Do not rubber-stamp unanimous consensus. Unanimous agreement can reflect shared prompt bias.
+Do not choose Sepsis solely because the child deteriorated, became unconscious, needed oxygen, could not eat/drink, or had multi-system terminal signs. Prefer the most specific PHMRC category that explains the initial and dominant syndrome.
+Do not choose Malaria solely from fever plus endemic location or a caregiver/doctor mention if stronger specific evidence supports diarrhea, measles, pneumonia, CNS infection, cancer, or another category.
+For chronic cases over 14 days with weight loss, edema, heart fluid, mass, or progressive decline, actively consider Chronic/Systemic/Other categories even if fever/cough is present.
 
-Section 5 — Output format:
+Section 6 — Output format:
 ```
-{{"final_diagnosis": "<category>", "mapped_category": "<exact PHMRC category name>", "confidence_score": <0-100>, "final_reasoning": "<two sentences: which agents you agreed with and what dossier evidence drove the decision>", "winning_agent": "<agent1_evidence_collector / agent2_symptom_scorer / agent3_timeline_analyst / split>"}}
+{{"final_diagnosis": "<category>", "mapped_category": "<exact PHMRC category name>", "confidence_score": <0-100>, "final_reasoning": "<3-4 sentences: which agents you agreed with, what dossier evidence drove the decision, and why the main alternative was rejected>", "winning_agent": "<agent1_evidence_collector / agent2_symptom_scorer / agent3_timeline_analyst / split>"}}
 ```
 
-Section 6 — [FINAL_DIAGNOSIS] tag line.
+Section 7 — Do not write anything before or after the JSON object.
 """
 
 def consensus_node(state: VAState) -> dict:
@@ -81,8 +99,7 @@ def adjudicator_node(state: VAState) -> dict:
         HumanMessage(content=prompt),
     ])
     raw_text = response.content if hasattr(response, "content") else str(response)
-    cleaned = strip_thoughts(raw_text)
-    result = parse_best_json(cleaned)
+    result = parse_best_json(raw_text)
 
     # Resolve mapped_category with fuzzy matching
     raw_cat = result.get("mapped_category", result.get("diagnosis", ""))

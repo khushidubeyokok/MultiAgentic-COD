@@ -121,8 +121,11 @@ def _secondary_note(ranked: list[tuple[str, int]]) -> str:
         )
     if top_domain == "Respiratory" and "Infectious/Febrile" in domain_names:
         notes.append(
-            "⚠️  SECONDARY SYMPTOM NOTE: Respiratory distress with fever — "
-            "likely primary pneumonia; rule out sepsis with respiratory involvement."
+            "SECONDARY SYMPTOM NOTE: Respiratory distress with fever can be primary pneumonia, "
+            "but it can also be a terminal complication of malaria, diarrhea/dehydration, cancer, "
+            "or sepsis. Do not diagnose Pneumonia unless cough/fast or difficult breathing is the "
+            "primary acute syndrome. If duration is over 14 days with weight loss, edema, mass, or "
+            "cardiac fluid, consider chronic/systemic causes."
         )
     return "\n".join(notes)
 

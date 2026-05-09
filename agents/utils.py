@@ -18,19 +18,19 @@ PHMRC_CATEGORIES = sorted([
     "Road Traffic",
 ], key=len, reverse=True)
 
-PHMRC_CATEGORY_GUIDE = """- Pneumonia: ACUTE illness (hours to days), cough PLUS fast/difficult breathing as the PRIMARY complaint, chest indrawing, fever, crackling breath sounds.
-  ⛔ CAUTION — DO NOT diagnose Pneumonia if: the illness is chronic (>2 weeks of progressive decline without acute respiratory crisis), OR there is a documented chronic underlying condition (HIV/AIDS, cancer, severe malnutrition) — consider AIDS, Other Cancers, or Other Defined Causes instead. A cough mentioned alongside another primary illness does NOT make this Pneumonia.
+PHMRC_CATEGORY_GUIDE = """- Pneumonia: ACUTE illness (hours to days) with a primary respiratory syndrome: cough and/or fast/difficult breathing, chest indrawing, fever, crackling breath sounds, grunting, wheezing, or severe respiratory distress.
+  CAUTION: Do NOT diagnose Pneumonia if the illness is chronic (>2 weeks of progressive decline without acute respiratory crisis), OR there is a documented chronic underlying condition (HIV/AIDS, cancer, severe malnutrition). A minor cough mentioned alongside another primary illness does NOT make this Pneumonia, but chest indrawing with fast/difficult breathing is strong respiratory evidence even if cough is absent.
 
-- Sepsis: SUDDEN rapid multi-organ deterioration, high or abnormally low temperature, no single clear focal infection site — the systemic response overwhelms any focal diagnosis.
-  ⛔ CRITICAL WARNING — Do NOT default to Sepsis just because you see fever. If the patient is from sub-Saharan Africa (Tanzania, Uganda, Kenya, Nigeria, Malawi, Mozambique, Ethiopia, etc.) AND has fever without clear bacterial source → consider Malaria FIRST. Sepsis should be your answer only after you have ruled out Malaria, Pneumonia, Meningitis, and Diarrhea.
+- Sepsis: SUDDEN rapid multi-organ deterioration with no more specific PHMRC cause explaining the initial illness syndrome.
+  CAUTION: Do NOT diagnose Sepsis from terminal decline alone. Oxygen use, unconsciousness, inability to eat/drink, and multi-system deterioration near death are common terminal complications of malaria, diarrhea/dehydration, pneumonia, cancer, and other infections.
 
 - Meningitis: STIFF NECK (nuchal rigidity) is the KEY sign. Stiff neck + fever + seizures/altered consciousness = Meningitis. Bulging fontanelle, photophobia, Kernig/Brudzinski signs confirm.
   ⛔ If stiff neck is NOT explicitly documented in the dossier, do NOT diagnose Meningitis. Seizures + fever WITHOUT stiff neck = Encephalitis, not Meningitis.
 
 - Encephalitis: Fever + seizures + altered or fluctuating consciousness — but NO STIFF NECK. If stiff neck is present in the dossier, choose Meningitis instead.
 
-- Malaria: Cyclical or spiking high fever, history of residence/travel in malaria-endemic region (sub-Saharan Africa, South/Southeast Asia), anaemia, splenomegaly; rapid deterioration in young child.
-  ⚠️ KEY RULE: In sub-Saharan African cases with undifferentiated fever and no clear bacterial source, Malaria is statistically far more likely than Sepsis. If location is African and primary complaint is high fever → Malaria is your top candidate.
+- Malaria: Cyclical or spiking high fever, anemia, splenomegaly, cerebral malaria pattern, malaria treatment/diagnosis evidence, transfusion for severe anemia, or dark/bloody urine with severe fever.
+  CAUTION: Do NOT diagnose Malaria from fever plus geography alone. Endemic location is supporting context only; it is not enough to override a more specific syndrome such as prolonged diarrhea, measles-like illness, pneumonia, meningitis/encephalitis, cancer, or other infectious disease.
 
 - Diarrhea/Dysentery: Watery or bloody stools as PRIMARY complaint, severe dehydration, sunken eyes, skin tenting, rapid weight loss, cramping.
   ⛔ If diarrhea is mentioned but is NOT the primary complaint, do not diagnose this. Also: if diarrhea co-occurs with CNS/respiratory signs, the CNS signs may be secondary dehydration complications — Diarrhea/Dysentery is still the primary diagnosis.
@@ -267,9 +267,11 @@ def fuzzy_match_category(text: str) -> str | None:
     if text_lower in CATEGORY_ALIASES:
         return CATEGORY_ALIASES[text_lower]
 
-    # 4. Check if any alias is contained within the text (for descriptive phrases)
+    # 4. Check if any alias is contained as a phrase, not as a substring.
+    # This prevents short aliases such as "ari" from matching inside "malaria".
     for alias, canonical in CATEGORY_ALIASES.items():
-        if alias in text_lower:
+        alias_pattern = r"(?<![a-z0-9])" + re.escape(alias).replace(r"\ ", r"\s+") + r"(?![a-z0-9])"
+        if re.search(alias_pattern, text_lower):
             return canonical
 
     # 5. Substring scan against canonical categories
@@ -279,8 +281,6 @@ def fuzzy_match_category(text: str) -> str | None:
 
     return None
 
-
-GEMMA4_THINKING_PREFIX = "<|think|>\n"
 
 def strip_thoughts(text: str) -> str:
     """
@@ -321,6 +321,21 @@ def _keyword_fallback(text: str) -> dict:
     Scan the text for any of the 21 PHMRC categories using fuzzy matching.
     Only used if JSON parsing fails completely.
     """
+    jsonish_match = re.search(
+        r'["\']?(?:diagnosis|final_diagnosis|mapped_category|recommended_diagnosis|consensus_diagnosis)["\']?\s*:\s*["\']?([^"\'\n\r,}]+)',
+        text,
+        re.IGNORECASE,
+    )
+    if jsonish_match:
+        matched = fuzzy_match_category(jsonish_match.group(1).strip())
+        if matched:
+            return {
+                "diagnosis": matched,
+                "confidence": "Medium (Partial JSON Match)",
+                "primary_reasoning": "Extracted diagnosis from partial JSON after full JSON parsing failed.",
+                "fallback": True
+            }
+
     # 1. Look for explicit [FINAL_DIAGNOSIS] tags first
     tag_match = re.search(r"\[FINAL_DIAGNOSIS\]\s*(.*?)\s*\[/FINAL_DIAGNOSIS\]", text, re.IGNORECASE)
     if tag_match:
@@ -331,6 +346,21 @@ def _keyword_fallback(text: str) -> dict:
                 "diagnosis": matched,
                 "confidence": "High (Tag Match)",
                 "primary_reasoning": "Extracted from [FINAL_DIAGNOSIS] tags.",
+                "fallback": True
+            }
+
+    diagnosis_match = re.search(
+        r"(?:final\s+diagnosis|diagnosis|mapped_category|cause\s+of\s+death|answer)\s*(?:is|:|-)\s*([^\n\r.;,}]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if diagnosis_match:
+        matched = fuzzy_match_category(diagnosis_match.group(1).strip())
+        if matched:
+            return {
+                "diagnosis": matched,
+                "confidence": "Medium (Diagnosis Phrase Match)",
+                "primary_reasoning": "Extracted from an explicit diagnosis phrase after JSON parsing failed.",
                 "fallback": True
             }
 
@@ -372,6 +402,13 @@ def parse_best_json(raw: str) -> dict:
     that parses correctly and contains a "diagnosis" key.
     """
     text = strip_thoughts(raw)
+
+    if not text:
+        tags = _keyword_fallback(raw)
+        if tags:
+            tags["raw_response"] = raw
+            return tags
+        return {"raw_response": raw}
     
     # 1. Try JSON extraction — find all {...} blocks
     # We use a greedy regex for candidates and then find all spans
@@ -425,6 +462,11 @@ def parse_best_json(raw: str) -> dict:
 
     # 2. Final Fallback: Try keyword extraction if JSON fails/is missing diagnosis
     tags = _keyword_fallback(text)
+    if tags:
+        tags["raw_response"] = raw
+        return tags
+
+    tags = _keyword_fallback(raw)
     if tags:
         tags["raw_response"] = raw
         return tags

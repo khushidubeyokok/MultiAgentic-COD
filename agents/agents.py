@@ -7,7 +7,7 @@ Defines the three specialist agent nodes with genuinely different reasoning prot
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.state import VAState
-from agents.utils import parse_best_json, GEMMA4_THINKING_PREFIX
+from agents.utils import parse_best_json
 from agents.model_config import make_llm
 from agents.disease_ref import get_disease_ref, get_category_guide
 
@@ -18,7 +18,7 @@ _LLM = make_llm()
 # AGENT 1 — THE EVIDENCE COLLECTOR 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_AGENT1_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical evidence collector identifying cause of death bottom-up from symptoms. If the illness is chronic (>2 weeks) or has underlying conditions like HIV/malnutrition, do NOT choose Pneumonia. Output only JSON."
+_AGENT1_SYSTEM = "You are a clinical evidence collector identifying cause of death bottom-up from symptoms. Include a concise clinical rationale inside the JSON fields. Your final answer must be only valid JSON, with no markdown."
 
 _AGENT1_PROTOCOL = """Section 1 — Triage context placeholder:
 {triage_context}
@@ -31,60 +31,37 @@ Section 2 — Reasoning approach, exactly 4 bullet points, no sub-bullets:
 
 Section 3 — Output format:
 ```
-{"agent_name": "agent1_evidence_collector", "diagnosis": "<exact category name>", "confidence": "High/Medium/Low", "primary_reasoning": "<two sentences: primary finding and why it maps to this category>", "alternative_rejected": "<category>", "rejection_reason": "<one sentence>"}
+{"agent_name": "agent1_evidence_collector", "diagnosis": "<exact category name>", "confidence": "High/Medium/Low", "primary_reasoning": "<2-3 sentences: key evidence, primary complaint, and why it maps to this category>", "alternative_rejected": "<category>", "rejection_reason": "<one sentence>"}
 ```
 
-Section 4 — One line: After the JSON write: [FINAL_DIAGNOSIS] Category [/FINAL_DIAGNOSIS]
+Section 4 — Do not write anything before or after the JSON object.
 """
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AGENT 2 — THE SYMPTOM SCORER 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_AGENT2_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical checklist evaluator scoring disease categories mechanically. If the illness is chronic (>2 weeks) or has underlying conditions like HIV/malnutrition, do NOT choose Pneumonia. Output only JSON."
+_AGENT2_SYSTEM = "You are a clinical checklist evaluator scoring disease categories mechanically. Include a concise scoring rationale inside the JSON fields. Your final answer must be only valid JSON, with no markdown."
 
-_AGENT2_PROTOCOL = """Section 1 — Triage context placeholder:
+_AGENT2_PROTOCOL = """Section 1 - Triage context placeholder:
 {triage_context}
 
-Section 2 — Instructions, 3 sentences:
-Read the dossier. Answer every checklist question with yes or no based only on what is explicitly written. Tally scores and pick the highest.
+Section 2 - Instructions:
+Score only the categories in the triage list against the dossier. Pick the highest-scoring category and include the next two closest alternatives in top3. Do not use endemic location alone as a Malaria criterion; require malaria-specific evidence or absence of a stronger primary syndrome.
 
-Section 3 — The checklist:
-[Pneumonia]: acute cough present? fast/difficult breathing primary complaint? chest indrawing? fever present? sudden onset?
-[Malaria]: spiking or cyclical fever? patient in sub-Saharan Africa or endemic region? anaemia or splenomegaly? no clear bacterial source?
-[Meningitis]: stiff neck EXPLICITLY documented? bulging fontanelle? photophobia? Kernig/Brudzinski signs?
-[Encephalitis]: seizures present? altered consciousness? fever? stiff neck ABSENT?
-[Sepsis]: rapid multi-organ deterioration? fever without single focal site? Africa ruled out? Pneumonia/Meningitis ruled out?
-[Diarrhea/Dysentery]: watery or bloody stools as PRIMARY complaint? severe dehydration? sunken eyes?
-[Measles]: maculopapular rash explicitly documented? face-to-body spread? fever + cough + conjunctivitis?
-[AIDS]: oral thrush? mother HIV+? recurrent infections? chronic diarrhea >1 month? wasting over months?
-[Hemorrhagic fever]: spontaneous bleeding from 2+ sites? fever present simultaneously?
-[Drowning]: found in/near water? submersion reported? water in airways?
-[Road Traffic]: vehicle collision mentioned? road accident? blunt trauma from impact?
-[Falls]: fall from height reported? child found injured after fall?
-[Fires]: burn injuries? fire/flame exposure? smoke inhalation?
-[Violent Death]: injuries inconsistent with history? assault documented? abuse signs?
-[Poisonings]: toxic substance ingestion? vomiting after exposure? no other explanation?
-[Bite of Venomous Animal]: snake or scorpion bite reported? local swelling/necrosis? systemic toxicity?
-[Other Cardiovascular Diseases]: murmur? cyanosis? oedema as primary? arrhythmia? no infection primary?
-[Other Cancers]: chronic illness weeks to months? palpable mass? unexplained weight loss? no fever pattern?
-[Other Digestive Diseases]: abdominal pain/jaundice WITHOUT diarrhea as primary? vomiting only? colicky pain in infant?
-[Other Infectious Diseases]: confirmed infection (typhoid/TB/pertussis) not fitting above categories?
-[Other Defined Causes of Child Deaths]: prematurity? birth asphyxia? congenital anomaly? neonatal period?
-
-Section 4 — Output format:
+Section 3 - Output format:
 ```
-{"agent_name": "agent2_symptom_scorer", "diagnosis": "<top scored category>", "confidence": "High/Medium/Low", "primary_reasoning": "<one sentence: top score was X with these key positives>", "top3": ["Cat1", "Cat2", "Cat3"]}
+{"agent_name": "agent2_symptom_scorer", "diagnosis": "<top scored category>", "confidence": "High/Medium/Low", "primary_reasoning": "<2-3 sentences: top score, key positives, and why close alternatives scored lower>", "top3": ["Cat1", "Cat2", "Cat3"]}
 ```
 
-Section 5 — [FINAL_DIAGNOSIS] tag line.
+Section 4 - Do not write anything before or after the JSON object.
 """
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AGENT 3 — THE TIMELINE ANALYST 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_AGENT3_SYSTEM = GEMMA4_THINKING_PREFIX + "You are a clinical timeline analyst identifying cause of death from the disease trajectory. If the illness is chronic (>2 weeks) or has underlying conditions like HIV/malnutrition, do NOT choose Pneumonia. Output only JSON."
+_AGENT3_SYSTEM = "You are a clinical timeline analyst identifying cause of death from the disease trajectory. Include a concise timeline rationale inside the JSON fields. Your final answer must be only valid JSON, with no markdown."
 
 _AGENT3_PROTOCOL = """Section 1 — Triage context placeholder:
 {triage_context}
@@ -97,10 +74,10 @@ Section 2 — Reasoning approach, exactly 4 bullet points:
 
 Section 3 — Output format:
 ```
-{"agent_name": "agent3_timeline_analyst", "diagnosis": "<exact category name>", "confidence": "High/Medium/Low", "primary_reasoning": "<two sentences: timeline summary and why it maps to this category>", "timeline_duration": "acute <72h / subacute 3-14d / chronic >2wk"}
+{"agent_name": "agent3_timeline_analyst", "diagnosis": "<exact category name>", "confidence": "High/Medium/Low", "primary_reasoning": "<2-3 sentences: timeline summary, progression speed, and why it maps to this category>", "timeline_duration": "acute <72h / subacute 3-14d / chronic >2wk"}
 ```
 
-Section 4 — [FINAL_DIAGNOSIS] tag line.
+Section 4 — Do not write anything before or after the JSON object.
 """
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -117,6 +94,10 @@ def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: st
         f"Broad Group: {broad_group}\n"
         f"Your diagnosis must come from this list unless you have strong evidence the triage was wrong:\n"
         f"{disease_list_text}\n\n"
+        f"### PRIMARY-CAUSE GUARDRAILS ###\n"
+        f"Terminal deterioration, oxygen use, unconsciousness, inability to eat/drink, or multi-organ decline near death are complications, not automatically the cause category.\n"
+        f"Do not choose Sepsis unless no more specific PHMRC category explains the initial and dominant illness syndrome.\n"
+        f"Do not choose Malaria from fever plus geography alone; require the dossier pattern to fit malaria better than diarrhea, measles, pneumonia, CNS infection, or other infectious disease.\n\n"
         f"### CRITICAL DIAGNOSTIC GUIDELINES ###\n"
         f"{guide_text}"
     )
@@ -133,6 +114,21 @@ def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: st
     ])
     raw_text = response.content if hasattr(response, "content") else str(response)
 
+    if not str(raw_text).strip():
+        retry_prompt = (
+            "Return exactly one valid JSON object and nothing else.\n"
+            f"Allowed categories:\n{disease_list_text}\n\n"
+            "JSON schema:\n"
+            '{"diagnosis": "<exact category>", "confidence": "High/Medium/Low", '
+            '"primary_reasoning": "<2 sentences>", "top3": ["Cat1", "Cat2", "Cat3"]}\n\n'
+            f"PATIENT DOSSIER:\n{dossier}"
+        )
+        response = _LLM.invoke([
+            SystemMessage(content="You are a medical verbal-autopsy classifier. Output only valid JSON."),
+            HumanMessage(content=retry_prompt),
+        ])
+        raw_text = response.content if hasattr(response, "content") else str(response)
+
     parsed = parse_best_json(raw_text)
     
     if not parsed or ("diagnosis" not in parsed and "broad_group" not in parsed) or parsed.get("diagnosis") == "Unknown":
@@ -143,6 +139,7 @@ def _call_llm(dossier: str, agent_key: str, system_msg: str, protocol_prompt: st
             "confidence": "Low",
             "primary_reasoning": "Reasoning model failed to output a valid diagnosis key.",
             "error": True,
+            "parse_failure": True,
             "raw_response": raw_text,
         }
 
