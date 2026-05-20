@@ -36,9 +36,3 @@ A multi-agent pipeline for automated cause-of-death assignment using PHMRC Verba
 ## Customization
 - Modify `agents/model_config.py` to change LLM model, sample size, or other parameters.
 - Add or edit disease category references in `agents/disease_ref.py`.
-
-## Authors
-- [Your Name Here]
-
-## License
-[Specify your license here]
